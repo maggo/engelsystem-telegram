@@ -1,0 +1,65 @@
+msgid "telegram.connected"
+msgstr "Your Telegram account is now connected."
+
+msgid "telegram.cancelled"
+msgstr "Telegram login was cancelled."
+
+msgid "telegram.error"
+msgstr "Telegram login failed, please try again."
+
+msgid "telegram.already-linked"
+msgstr "This Telegram account is already connected to another volunteer."
+
+msgid "telegram.not-on-list"
+msgstr "Your Telegram username isn't on the volunteer list. Please contact the volunteer coordinators."
+
+msgid "telegram.admin.title"
+msgstr "Telegram & bot"
+
+msgid "telegram.admin.import.title"
+msgstr "Import the final volunteer list"
+
+msgid "telegram.admin.import.info"
+msgstr "Do this once, when the shifts are final. Paste CSV rows: handle, name, area, shifts, lead. Shifts look like \"2026-11-03 AM; 2026-11-04 PM\", lead is \"yes\" for leads. Each row creates an account with area, lead role and shifts; people who already exist are skipped and not changed."
+
+msgid "telegram.admin.import"
+msgstr "Import"
+
+msgid "telegram.admin.bot.title"
+msgstr "Bot"
+
+msgid "telegram.admin.checkin.title"
+msgstr "Today's check-in QR code"
+
+msgid "telegram.dashboard.title"
+msgstr "Volunteer dashboard"
+
+msgid "telegram.admin.onboarding.title"
+msgstr "Onboarding codes"
+
+msgid "config.telegram"
+msgstr "Telegram"
+
+msgid "config.telegram_bot_token"
+msgstr "Bot token"
+
+msgid "config.telegram_bot_token.info"
+msgstr "From @BotFather. Changing it also changes the webhook secret and the pinger URL: reconnect the bot and update the pinger afterwards."
+
+msgid "config.telegram_client_id"
+msgstr "Login client ID"
+
+msgid "config.telegram_client_secret"
+msgstr "Login client secret"
+
+msgid "config.telegram_client_id.info"
+msgstr "From @BotFather > your bot > Login Widget. Both fields are needed for login with Telegram."
+
+msgid "telegram.admin.unlink.title"
+msgstr "Reset a Telegram link"
+
+msgid "telegram.admin.unlink.info"
+msgstr "For a wrong handle or when the wrong person connected: removes the account's bot chat and Telegram login and logs them out. Afterwards the account waits for the Telegram username you enter, or its Engelsystem username if left empty."
+
+msgid "telegram.admin.unlink"
+msgstr "Reset link"

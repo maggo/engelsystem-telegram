@@ -1,0 +1,79 @@
+{% extends 'layouts/app.twig' %}
+
+{% block title %}{{ __('telegram.dashboard.title') }}{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-3 gap-2">
+            <h1 class="mb-0">{{ block('title') }}</h1>
+            <span class="text-muted small">
+                {{ now.format('D, M j H:i') }} · refreshes every minute ·
+                <a href="{{ url('/admin/telegram') }}">{{ __('telegram.admin.title') }}</a>
+            </span>
+        </div>
+
+        {# Onboarding #}
+        {% set total = onboarding.total %}
+        <h2 class="h4">Onboarding</h2>
+        <p>
+            <b>{{ total.onboarded }}</b> of {{ total.people }} onboarded (arrived) ·
+            <b>{{ total.connected }}</b> connected to the bot ·
+            <b>{{ total.people - total.onboarded }}</b> not onboarded yet
+        </p>
+        <div class="table-responsive mb-2">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr><th>Area</th><th class="text-end">People</th><th class="text-end">Connected</th><th class="text-end">Onboarded</th><th class="text-end">Missing</th></tr>
+                </thead>
+                <tbody>
+                    {% for area in onboarding.areas %}
+                        <tr>
+                            <td>{{ area.name }}</td>
+                            <td class="text-end">{{ area.people }}</td>
+                            <td class="text-end">{{ area.connected }}</td>
+                            <td class="text-end">{{ area.onboarded }}</td>
+                            <td class="text-end {{ area.missing|length ? 'text-danger fw-bold' : 'text-success' }}">{{ area.missing|length }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% for area in onboarding.areas|filter(area => area.missing|length) %}
+            <details class="mb-2">
+                <summary>{{ area.name }}: {{ area.missing|length }} not onboarded</summary>
+                <table class="table table-sm align-middle mt-2">
+                    <tbody>
+                        {% for person in area.missing %}
+                            <tr>
+                                <td>
+                                    {{ person.user.displayName }}{% if person.lead %} <span class="badge bg-info">lead</span>{% endif %}
+                                    <br><span class="small text-muted">{{ person.connected ? 'connected to the bot' : 'not connected' }}</span>
+                                </td>
+                                <td class="small">
+                                    {{ person.handle ? '@' ~ person.handle : person.user.name }} ·
+                                    <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">edit in Engelsystem</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </details>
+        {% endfor %}
+        <p class="small text-muted mb-5">
+            Wrong handle, or the wrong person connected? Use <a href="{{ url('/admin/telegram') }}">{{ __('telegram.admin.unlink.title') }}</a>.
+            No phone or no Telegram? Mark them as arrived on the <a href="{{ url('/admin-arrive') }}">Arrived angels</a> page.
+        </p>
+
+        <h2 class="h4">Everything else is in Engelsystem</h2>
+        <ul class="mb-5">
+            <li><a href="{{ url('/user-shifts') }}">Shifts</a>: staffing and open slots</li>
+            <li><a href="{{ url('/admin-free') }}">Free angels</a>: who is available for a replacement</li>
+            <li><a href="{{ url('/admin-active') }}">Goodie list</a>: goodie score (no-shows count against it)</li>
+            <li><a href="{{ url('/admin-arrive') }}">Arrived angels</a>: onboarding by hand</li>
+            <li><a href="{{ url('/admin/logs', {'search': log_prefix|trim}) }}">Log</a>: everything the bot did</li>
+        </ul>
+    </div>
+
+    <script src="{{ url('/admin/telegram/dashboard.js') }}"></script>
+{% endblock %}

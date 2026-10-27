@@ -1,0 +1,94 @@
+{% extends 'layouts/app.twig' %}
+{% import 'macros/form.twig' as f %}
+
+{% block title %}{{ __('telegram.admin.title') }}{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <h1 class="mb-4">{{ block('title') }}</h1>
+        {% include 'layouts/parts/messages.twig' %}
+
+        <div class="row g-4 mb-5">
+            <div class="col-lg-6">
+                <h2 class="h4">{{ __('telegram.admin.bot.title') }}</h2>
+                {% if not bot %}
+                    <div class="alert alert-warning">Enter the bot token in <a href="{{ url('/admin/config/telegram') }}">Settings &gt; Telegram</a> to enable the bot.</div>
+                {% else %}
+                    <p>
+                        <a href="https://t.me/{{ bot.username }}" target="_blank" rel="noopener">@{{ bot.username }}</a> ·
+                        {% if webhook.url == webhook_url %}
+                            <span class="text-success">connected</span>
+                        {% elseif webhook.url %}
+                            <span class="text-warning">connected to another address: {{ webhook.url }}</span>
+                        {% else %}
+                            <span class="text-danger">not connected</span>
+                        {% endif %}
+                        {% if webhook.last_error_message is defined %}
+                            <br><span class="text-danger">Last error: {{ webhook.last_error_message }}</span>
+                        {% endif %}
+                    </p>
+                    <form action="{{ url('/admin/telegram/bot') }}" method="post" class="d-inline">
+                        {{ csrf() }}
+                        {{ f.submit(webhook.url == webhook_url ? 'Reconnect' : 'Connect bot to this site', {'size': 'sm'}) }}
+                    </form>
+                    {% if webhook.url %}
+                        <form action="{{ url('/admin/telegram/bot') }}" method="post" class="d-inline">
+                            {{ csrf() }}
+                            {{ f.hidden('action', 'disconnect') }}
+                            {{ f.submit('Disconnect', {'size': 'sm', 'btn_type': 'secondary'}) }}
+                        </form>
+                    {% endif %}
+                    <p class="mt-3 mb-1 small text-muted">
+                        Scheduled messages run on site traffic, at most every 30 seconds.
+                        Last run: {{ last_tick ? last_tick.format('D H:i:s') : 'never' }}.
+                        Optional pinger URL (keep secret): <code class="user-select-all">{{ tick_url }}</code>
+                    </p>
+                    <p class="small text-muted mb-1">
+                        Group chats: add the bot to a group and send <code>/linkgroup Registration</code> (area) or <code>/linkgroup coordination</code>.
+                        {% for chat in chats %}
+                            <br>• {{ chat.title ?: chat.chat_id }} → {{ chat.angelType ? chat.angelType.name : 'coordination' }}
+                        {% endfor %}
+                    </p>
+                {% endif %}
+            </div>
+
+            {% if bot %}
+                <div class="col-lg-6">
+                    <h2 class="h4">{{ __('telegram.admin.onboarding.title') }}</h2>
+                    <div class="row g-3 text-center small">
+                        <div class="col-sm-4">
+                            <img src="{{ url('/admin/telegram/qr', {'for': 'join'}) }}" alt="Connect QR code" class="img-fluid bg-white p-2 rounded">
+                            <div class="mt-1"><b>1. Connect</b> (optional, any day)<br><a href="{{ join_link }}" target="_blank" rel="noopener">{{ join_link }}</a></div>
+                        </div>
+                        <div class="col-sm-4">
+                            <img src="{{ url('/admin/telegram/qr', {'for': 'done'}) }}" alt="Onboarding completion QR code" class="img-fluid bg-white p-2 rounded">
+                            <div class="mt-1"><b>2. Complete onboarding</b><br>show only at the end of onboarding day · valid {{ now.format('M j') }} · <code>{{ done_code }}</code></div>
+                        </div>
+                        <div class="col-sm-4">
+                            <img src="{{ url('/admin/telegram/qr') }}" alt="Check-in QR code" class="img-fluid bg-white p-2 rounded">
+                            <div class="mt-1"><b>{{ __('telegram.admin.checkin.title') }}</b><br>daily at the desk · valid {{ now.format('M j') }} · <code>{{ checkin_code }}</code><br>can't scan? send <code>/checkin {{ checkin_code }}</code></div>
+                        </div>
+                    </div>
+                    <p class="mt-3"><a href="{{ url('/admin/telegram/dashboard') }}" class="btn btn-primary btn-sm">{{ __('telegram.dashboard.title') }}</a></p>
+                </div>
+            {% endif %}
+        </div>
+
+        <h2 class="h4">{{ __('telegram.admin.unlink.title') }}</h2>
+        <p>{{ __('telegram.admin.unlink.info') }}</p>
+        <form action="{{ url('/admin/telegram/unlink') }}" method="post" class="row g-2 mb-5">
+            {{ csrf() }}
+            <div class="col-md-4">{{ f.input('account', 'Account (Engelsystem username or Telegram handle)', {'required': true}) }}</div>
+            <div class="col-md-4">{{ f.input('handle', 'Correct Telegram username (optional)') }}</div>
+            <div class="col-md-4 align-self-end">{{ f.submit(__('telegram.admin.unlink'), {'btn_type': 'danger'}) }}</div>
+        </form>
+
+        <h2 class="h4">{{ __('telegram.admin.import.title') }}</h2>
+        <p>{{ __('telegram.admin.import.info') }}</p>
+        <form action="{{ url('/admin/telegram/import') }}" method="post" class="mb-5">
+            {{ csrf() }}
+            {{ f.textarea('csv', 'CSV', {'rows': 6, 'placeholder': 'handle,name,area,shifts,lead\ntelegram_handle,Full name,Registration,2026-11-03 AM; 2026-11-04 AM,\nlead_handle,Full name,Registration,2026-11-03 AM,yes'}) }}
+            {{ f.submit(__('telegram.admin.import')) }}
+        </form>
+    </div>
+{% endblock %}

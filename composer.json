@@ -1,0 +1,62 @@
+{
+    "type": "engelsystem-plugin",
+    "name": "telegram/plugin",
+    "description": "Telegram login, onboarding, check-in and a shift bot for volunteers",
+    "version": "1.0.0",
+    "license": "GPL-2.0-or-later",
+    "homepage": "https://github.com/maggo/engelsystem-telegram",
+    "extra": {
+        "config_options": {
+            "telegram": {
+                "icon": "telegram",
+                "order": 70,
+                "config": {
+                    "telegram_bot_token": {
+                        "type": "password"
+                    },
+                    "telegram_client_id": {
+                        "type": "string"
+                    },
+                    "telegram_client_secret": {
+                        "type": "password"
+                    }
+                }
+            }
+        },
+        "providers": [
+            "Telegram\\Plugin\\ServiceProvider"
+        ],
+        "middleware": [
+            "Telegram\\Plugin\\OAuthMiddleware",
+            "Telegram\\Plugin\\TickMiddleware"
+        ],
+        "routes": {
+            "/admin/telegram": "Telegram\\Plugin\\AdminController@index",
+            "/admin/telegram/dashboard": "Telegram\\Plugin\\AdminController@dashboard",
+            "/admin/telegram/dashboard.js": "Telegram\\Plugin\\AdminController@dashboardScript",
+            "/admin/telegram/import": [
+                "Telegram\\Plugin\\AdminController@import",
+                "POST"
+            ],
+            "/admin/telegram/unlink": [
+                "Telegram\\Plugin\\AdminController@unlink",
+                "POST"
+            ],
+            "/admin/telegram/bot": [
+                "Telegram\\Plugin\\AdminController@bot",
+                "POST"
+            ],
+            "/admin/telegram/qr": "Telegram\\Plugin\\AdminController@qr",
+            "/telegram/webhook": [
+                "Telegram\\Plugin\\BotController@webhook",
+                "POST"
+            ],
+            "/telegram/tick": "Telegram\\Plugin\\BotController@tick"
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Telegram\\Plugin\\": "src/"
+        }
+    }
+}
