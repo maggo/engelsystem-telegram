@@ -4,7 +4,7 @@ Each release is tagged `vX.Y.Z`, matching `version` in `composer.json`. Releases
 migrations or new settings say so, as they need **Admin > Plugins > Telegram > Update** or an
 admin entering something.
 
-## 1.0.1 (unreleased)
+## 1.0.1 (2026-10-28)
 
 - **Tested against:** Engelsystem `main` at `f09f95ec`.
 - **No migration, no new settings.**
