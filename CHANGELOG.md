@@ -4,6 +4,18 @@ Each release is tagged `vX.Y.Z`, matching `version` in `composer.json`. Releases
 migrations or new settings say so, as they need **Admin > Plugins > Telegram > Update** or an
 admin entering something.
 
+## 1.0.1 (2026-10-28)
+
+- **Tested against:** Engelsystem `main` at `f09f95ec`.
+- **No migration, no new settings.**
+- **Security:** the bot no longer connects an account because its Engelsystem username matches
+  someone's Telegram handle. Previously, with registration disabled, whoever held a handle equal
+  to the username of a not-yet-connected volunteer account (e.g. one made with a password) could
+  connect it and then log in to the website with Telegram. Now only accounts an admin set a
+  handle for connect by handle: the CSV import, or **Set or reset a Telegram link** (formerly
+  *Reset a Telegram link*), which also works for accounts that were never connected. Everyone
+  else logs in and connects under Settings > OAuth.
+
 ## 1.0.0 (2026-10-27)
 
 First release.

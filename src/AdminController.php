@@ -82,8 +82,8 @@ class AdminController extends BaseController
     }
 
     /**
-     * Removes someone's Telegram link, e.g. when the wrong person connected: clears the bot chat
-     * and the website login, logs them out and sets the Telegram username the account waits for
+     * Sets the Telegram username an account waits for, e.g. for someone created in Engelsystem,
+     * or when the wrong person connected: clears the bot chat and the website login and logs them out
      *
      * Accounts with more rights than a volunteer never wait for a handle, as whoever holds it
      * would get them: they log in with their password and connect Telegram in their settings.
@@ -111,6 +111,8 @@ class AdminController extends BaseController
             return $this->redirect->to('/admin/telegram');
         }
 
+        $wasLinked = TelegramAccount::query()->whereKey($user->id)->whereNotNull('chat_id')->exists()
+            || OAuth::query()->where('user_id', $user->id)->where('provider', ServiceProvider::PROVIDER)->exists();
         OAuth::query()->where('user_id', $user->id)->where('provider', ServiceProvider::PROVIDER)->delete();
         TelegramAccount::query()->updateOrCreate(
             ['user_id' => $user->id],
@@ -128,8 +130,18 @@ class AdminController extends BaseController
             return $this->redirect->to('/admin/telegram');
         }
 
-        Roster::log(sprintf('%s reset the Telegram link of %s, waiting for @%s', $this->auth->user()->name, $user->name, $handle));
-        $this->addNotification(sprintf('Telegram link of "%s" removed. @%s can connect now.', $user->name, $handle));
+        Roster::log(sprintf(
+            '%s %s the Telegram link of %s, waiting for @%s',
+            $this->auth->user()->name,
+            $wasLinked ? 'reset' : 'set',
+            $user->name,
+            $handle
+        ));
+        $this->addNotification(sprintf(
+            '%s@%s can connect now by messaging the bot.',
+            $wasLinked ? sprintf('Telegram link of "%s" removed. ', $user->name) : sprintf('"%s" waits for Telegram: ', $user->name),
+            $handle
+        ));
 
         return $this->redirect->to('/admin/telegram');
     }

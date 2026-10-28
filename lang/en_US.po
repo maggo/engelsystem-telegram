@@ -56,10 +56,10 @@ msgid "config.telegram_client_id.info"
 msgstr "From @BotFather > your bot > Login Widget. Both fields are needed for login with Telegram."
 
 msgid "telegram.admin.unlink.title"
-msgstr "Reset a Telegram link"
+msgstr "Set or reset a Telegram link"
 
 msgid "telegram.admin.unlink.info"
-msgstr "For a wrong handle or when the wrong person connected: removes the account's bot chat and Telegram login and logs them out. Afterwards the account waits for the Telegram username you enter, or its Engelsystem username if left empty."
+msgstr "For someone you created in Engelsystem, a wrong handle, or when the wrong person connected: removes the account's bot chat and Telegram login (if any) and logs them out. Afterwards the account waits for the Telegram username you enter, or its Engelsystem username if left empty, and connects when that username messages the bot. Optional: people can also log in and connect Telegram under Settings > OAuth."
 
 msgid "telegram.admin.unlink"
-msgstr "Reset link"
+msgstr "Set link"
