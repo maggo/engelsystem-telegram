@@ -157,18 +157,10 @@ class Bot
             return null;
         }
 
-        // Matching by username is only safe while nobody can create their own account. Accounts
-        // that already wait for a handle (import, reset link) only match that handle, accounts
-        // linked to another Telegram user (the handle was given up and taken by someone else)
-        // never match, and accounts with more rights than a volunteer never match by handle or
-        // name: they connect in their settings.
-        $defaultGroup = $this->auth->getDefaultRole();
-        $user = TelegramAccount::waitingFor($username, $defaultGroup)?->user
-            ?? (config('registration_enabled') ? null : User::query()
-                ->whereRaw('LOWER(name) = ?', [$username])
-                ->whereNotIn('id', TelegramAccount::query()->select('user_id'))
-                ->whereDoesntHave('groups', fn($groups) => $groups->where('groups.id', '!=', $defaultGroup))
-                ->first());
+        // Only accounts an admin set a handle for (import, set link) connect by handle; never by
+        // the Engelsystem username, which nobody confirmed is this person's handle. Everyone else
+        // connects in their settings, as do accounts with more rights than a volunteer.
+        $user = TelegramAccount::waitingFor($username, $this->auth->getDefaultRole())?->user;
         if (!$user) {
             return null;
         }

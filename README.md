@@ -6,7 +6,8 @@ Runs volunteer shifts over Telegram, on top of an unchanged [Engelsystem](https:
 - **Volunteers:** their shifts and meeting points in the bot, a reminder an hour before each shift, and "running late" or "can't make it" with a reason for their lead.
 - **Leads** (supporters of an area): team roster, roll call at shift start, excuse or no-show, open slots and replacements.
 - **Desk:** a daily check-in QR code, and one that completes onboarding.
-- **Admins:** a CSV volunteer import, resetting someone's Telegram link, and an onboarding dashboard.
+- **Admins:** a CSV volunteer import, setting or resetting someone's Telegram link, and an onboarding dashboard.
+- **Connecting:** an account connects to Telegram by username only when an admin set that username (CSV import, or *Set or reset a Telegram link*). Otherwise people log in and connect under Settings > OAuth, as with any Engelsystem OAuth provider. The Engelsystem username is never matched.
 
 Everything that counts is stored the Engelsystem way (arrival, shift entries, no-shows), so the same can be done in Engelsystem itself when the bot is down.
 
