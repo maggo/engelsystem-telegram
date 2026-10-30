@@ -53,7 +53,7 @@ class BotApi
     {
         $this->failedTemporarily = false;
 
-        for ($attempt = 1; ; $attempt++) {
+        for ($attempt = 1;; $attempt++) {
             $this->throttle();
 
             try {

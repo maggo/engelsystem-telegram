@@ -6,6 +6,7 @@ namespace Telegram\Plugin;
 
 use Carbon\Carbon;
 use Engelsystem\Models\EventConfig;
+use Engelsystem\Models\News;
 use Engelsystem\Models\Shifts\Shift;
 use Engelsystem\Models\Shifts\ShiftEntry;
 use Illuminate\Database\Connection;
@@ -14,8 +15,9 @@ use Throwable;
 
 /**
  * Time-based bot messages:
- * - Pre-shift ping: 60 min before start, to everyone on the shift who hasn't checked in today
- * - Roll call: at shift start, leads get the list of people still not checked in
+ * - Pre-shift ping: 2 hours before start, to everyone on the shift (also when checked in already)
+ * - Roll call: 15 minutes before the shift starts, leads get the list of people still not checked in
+ * - News: new news with "Send notification" ticked, to everyone (NewsNotification)
  *
  * Every message is claimed before it is sent and marked as sent afterwards (Notification), and
  * forgotten again if sending failed, so it goes out once, on a later tick if need be. A message
@@ -23,8 +25,10 @@ use Throwable;
  */
 class Scheduler
 {
-    public const PRESHIFT_MINUTES = 60;
-    public const ROLLCALL_WINDOW_MINUTES = 30;
+    /** The shift reminder goes out this long before the shift starts */
+    public const PRESHIFT_MINUTES = 120;
+    /** The roll call goes to the leads this long before the shift starts, when the team meets */
+    public const ROLLCALL_BEFORE_MINUTES = 15;
     protected const INTERVAL_SECONDS = 30;
     /** Stored in event_config, so config('telegram_last_tick') exists too; it isn't a setting */
     protected const KEY = 'telegram_last_tick';
@@ -58,6 +62,7 @@ class Scheduler
                 $this->unfinishedUpdates();
                 $this->preshiftPings($now);
                 $this->rollCalls($now);
+                $this->newsPings($now);
                 $this->prune();
             });
         } finally {
@@ -141,14 +146,6 @@ class Scheduler
                 ->where('start', '<=', $now->copy()->addMinutes(self::PRESHIFT_MINUTES)))
             ->get();
 
-        // "user:day" of everyone checked in on their shift's day
-        $checkedIn = Checkin::query()
-            ->whereIn('day', $entries->map(fn(ShiftEntry $entry) => $entry->shift->start->toDateString())->unique())
-            ->whereIn('user_id', $entries->pluck('user_id'))
-            ->get()
-            ->map(fn(Checkin $checkin) => $checkin->user_id . ':' . $checkin->day)
-            ->all();
-
         // Only people the bot can reach; someone who connects later still gets it on a later tick
         $reachable = TelegramAccount::query()
             ->whereIn('user_id', $entries->pluck('user_id'))
@@ -157,10 +154,7 @@ class Scheduler
             ->all();
 
         foreach ($entries as $entry) {
-            if (
-                !in_array($entry->user_id, $reachable)
-                || in_array($entry->user_id . ':' . $entry->shift->start->toDateString(), $checkedIn)
-            ) {
+            if (!in_array($entry->user_id, $reachable)) {
                 continue;
             }
 
@@ -176,8 +170,9 @@ class Scheduler
     {
         $shifts = Shift::query()
             ->with(['schedule', 'neededAngelTypes'])
-            ->where('start', '<=', $now)
-            ->where('start', '>', $now->copy()->subMinutes(self::ROLLCALL_WINDOW_MINUTES))
+            ->where('start', '<=', $now->copy()->addMinutes(self::ROLLCALL_BEFORE_MINUTES))
+            // Late rather than never, if nothing ticked when it was due
+            ->where('end', '>', $now)
             ->get();
 
         foreach ($shifts as $shift) {
@@ -187,6 +182,42 @@ class Scheduler
                     $now,
                     fn() => $this->leads->sendRollCall($shift, $needed->angel_type_id)
                 );
+            }
+        }
+    }
+
+    /**
+     * News marked by NewsNotification, to everyone the bot can reach; a news that isn't out to
+     * everyone after a day (someone blocked the bot) is given up
+     */
+    protected function newsPings(Carbon $now): void
+    {
+        $pending = Notification::query()
+            ->where(['kind' => Notification::NEWS, 'user_id' => 0])
+            ->whereNull('sent_at')
+            ->where('created_at', '>', $now->copy()->subDay())
+            ->pluck('shift_id');
+        if ($pending->isEmpty()) {
+            return;
+        }
+
+        $accounts = TelegramAccount::query()->whereNotNull('chat_id')->get();
+        foreach (News::query()->whereIn('id', $pending)->get() as $news) {
+            foreach ($accounts as $account) {
+                $this->sendOnce(
+                    [Notification::NEWS, $news->id, $account->user_id, 0],
+                    $now,
+                    fn() => $this->bot->sendNews($news, $account->chat_id)
+                );
+            }
+
+            $done = Notification::query()
+                ->where(['kind' => Notification::NEWS, 'shift_id' => $news->id])
+                ->where('user_id', '!=', 0)
+                ->whereNotNull('sent_at')
+                ->count();
+            if ($done >= $accounts->count()) {
+                Notification::sent(Notification::NEWS, $news->id);
             }
         }
     }
@@ -242,5 +273,13 @@ class Scheduler
     {
         $config = EventConfig::query()->find(self::KEY);
         return $config?->updated_at;
+    }
+
+    /**
+     * From when the roll call is out and its buttons work
+     */
+    public static function rollCallStarted(Shift $shift): bool
+    {
+        return $shift->start->copy()->subMinutes(self::ROLLCALL_BEFORE_MINUTES) <= Carbon::now();
     }
 }

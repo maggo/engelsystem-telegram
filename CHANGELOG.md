@@ -4,6 +4,34 @@ Each release is tagged `vX.Y.Z`, matching `version` in `composer.json`. Releases
 migrations or new settings say so, as they need **Admin > Plugins > Telegram > Update** or an
 admin entering something.
 
+## 1.1.0 (2026-10-30)
+
+- **Tested against:** Engelsystem `main` at `f09f95ec`.
+- **No migration.** **New settings** (Settings > Telegram): `telegram_standby_area` (empty keeps
+  the 1.0 behaviour) and `telegram_meeting_place`.
+- **Shift import:** Admin > Telegram & bot > *Create the shifts* (title, area, location, start,
+  end, needed). Existing shifts are reused, missing locations and shift types created.
+- **Volunteer import:** a shift can name its own area (`2027-08-19 AM Kitchen`), the lead column
+  takes "yes", "no" or the areas someone leads, and existing accounts get their areas and shifts
+  added instead of being skipped. Re-importing adds nothing.
+- **Standby:** with a standby area, replacements come only from standby people on shift now or
+  within the hour (checked-in first); picking one moves them, joining the area if needed.
+- **Notify your lead:** the reminder has one button instead of *Running late* / *Can't make it*
+  (none for leads). The volunteer must write a message; the lead excuses, marks a no-show, or
+  marks them here in the roll call. One message per shift.
+- **Timing:** reminder two hours before the shift (to everyone, with the meeting place an hour
+  before), roll call 15 minutes before (sent late rather than never).
+- **Roll call:** one message per shift that turns into the replacement list and back; *is here*
+  / *Excuse* / *No-show* buttons; replacements count as not here until the lead marks them; the
+  header counts volunteers ("4/5 volunteers on the shift · all here").
+- **News:** a new news with *Send notification* ticked goes to everyone on Telegram, once.
+- **Hardening:** buttons only count on the message they were sent with; decisions and roll call
+  buttons check the lead's area and timing; stored Telegram updates lose their content once
+  handled; the bot no longer leaves a group when promoted in it.
+- **Fixes:** no duplicate slot messages, no "everyone is checked in" for an empty roll call, no
+  "standby" on check-in days without a shift, a double tap or late *Find replacement* keeps the
+  message's buttons, bot texts no longer mention goodies.
+
 ## 1.0.1 (2026-10-28)
 
 - **Tested against:** Engelsystem `main` at `f09f95ec`.

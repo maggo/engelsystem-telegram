@@ -10,13 +10,13 @@ use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
 use Carbon\Carbon;
 use Engelsystem\Controllers\BaseController;
-use Engelsystem\Helpers\Authenticator;
-use Engelsystem\Http\UrlGenerator;
 use Engelsystem\Controllers\HasUserNotifications;
 use Engelsystem\Controllers\NotificationType;
+use Engelsystem\Helpers\Authenticator;
 use Engelsystem\Http\Redirector;
 use Engelsystem\Http\Request;
 use Engelsystem\Http\Response;
+use Engelsystem\Http\UrlGenerator;
 use Engelsystem\Models\OAuth;
 use Engelsystem\Models\User\User;
 
@@ -67,12 +67,34 @@ class AdminController extends BaseController
         $result = Import::run((string) $request->postData('csv', ''), $this->auth->user());
 
         $this->addNotification(sprintf(
-            '%d account(s) created, %d already existed and were left unchanged.',
+            '%d account(s) created, %d already existed and only got their areas and shifts.',
             $result['created'],
-            count($result['skipped'])
+            count($result['existing'])
         ));
-        foreach ($result['skipped'] as $skipped) {
-            $this->addNotification('Skipped, left unchanged: ' . $skipped, NotificationType::WARNING);
+        foreach ($result['existing'] as $existing) {
+            $this->addNotification($existing, NotificationType::WARNING);
+        }
+        foreach ($result['problems'] as $problem) {
+            $this->addNotification($problem, NotificationType::ERROR);
+        }
+
+        return $this->redirect->to('/admin/telegram');
+    }
+
+    /**
+     * Creates the shifts for the volunteer import, see Import::shifts()
+     */
+    public function importShifts(Request $request): Response
+    {
+        $result = Import::shifts((string) $request->postData('csv', ''), $this->auth->user());
+
+        $this->addNotification(sprintf(
+            '%d shift(s) created, %d already existed.',
+            $result['created'],
+            count($result['merged'])
+        ));
+        foreach ($result['merged'] as $merged) {
+            $this->addNotification($merged, NotificationType::WARNING);
         }
         foreach ($result['problems'] as $problem) {
             $this->addNotification($problem, NotificationType::ERROR);

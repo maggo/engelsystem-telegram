@@ -26,13 +26,17 @@ class Notification extends BaseModel
 {
     public const PRESHIFT = 'preshift';
     public const ROLLCALL = 'rollcall';
+    /** shift_id is the news id here */
+    public const NEWS = 'news';
 
     /** Answers to the pre-shift ping; what counts is recorded in Engelsystem (entry removed or no-show) */
-    public const LATE = 'late';
     public const ASKED = 'asked';
     public const CANT = 'cant';
     public const EXCUSED = 'excused';
     public const UNEXCUSED = 'unexcused';
+    /** Picked as a replacement: being checked in for the day doesn't count until the lead saw them there */
+    public const MOVED = 'moved';
+    public const HERE = 'here';
 
     public $table = 'telegram_notifications'; // phpcs:ignore
 

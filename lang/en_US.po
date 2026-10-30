@@ -16,11 +16,20 @@ msgstr "Your Telegram username isn't on the volunteer list. Please contact the v
 msgid "telegram.admin.title"
 msgstr "Telegram & bot"
 
+msgid "telegram.admin.import_shifts.title"
+msgstr "Create the shifts"
+
+msgid "telegram.admin.import_shifts.info"
+msgstr "Before the volunteer import, as it puts people on these shifts. Paste CSV rows: title, area, location, start, end, needed. Start and end look like \"2027-08-17 08:00\" (the site's time zone), needed is the number of people for the area, leads included. Missing locations are created, and each shift gets a shift type named after its area. A shift that already exists (same title, start, end and location) is reused: a missing area is added, a lower need is raised."
+
+msgid "telegram.admin.import_shifts"
+msgstr "Create shifts"
+
 msgid "telegram.admin.import.title"
 msgstr "Import the final volunteer list"
 
 msgid "telegram.admin.import.info"
-msgstr "Do this once, when the shifts are final. Paste CSV rows: handle, name, area, shifts, lead. Shifts look like \"2026-11-03 AM; 2026-11-04 PM\", lead is \"yes\" for leads. Each row creates an account with area, lead role and shifts; people who already exist are skipped and not changed."
+msgstr "Do this once, when the list is final and the shifts exist. Paste CSV rows: handle, name, area, shifts, lead. Shifts look like \"2027-08-17 AM; 2027-08-18 PM\"; a shift in another area names it, like \"2027-08-19 AM Kitchen\". Lead is \"yes\" for leads of the area, or the areas they lead, like \"Info Desk; Kitchen\". Each row creates an account with areas, lead role and shifts. People who already have an account only get their areas, lead role and shifts added; nothing else changes."
 
 msgid "telegram.admin.import"
 msgstr "Import"
@@ -54,6 +63,18 @@ msgstr "Login client secret"
 
 msgid "config.telegram_client_id.info"
 msgstr "From @BotFather > your bot > Login Widget. Both fields are needed for login with Telegram."
+
+msgid "config.telegram_standby_area"
+msgstr "Standby area"
+
+msgid "config.telegram_standby_area.info"
+msgstr "Name of the area (angel type) whose volunteers wait on standby shifts. Standby shifts must be shifts of their own. Replacements for any area then come only from the people on standby at that time; picking one moves them off standby. Its open slots are not reported as gaps. Leave empty if there is no standby."
+
+msgid "config.telegram_meeting_place"
+msgstr "Meeting place"
+
+msgid "config.telegram_meeting_place.info"
+msgstr "Where volunteers meet before their shift, e.g. \"the volunteer lounge\". The shift reminder asks them to be there an hour before the shift starts. Leave empty to just give the time."
 
 msgid "telegram.admin.unlink.title"
 msgstr "Set or reset a Telegram link"
