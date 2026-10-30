@@ -29,6 +29,8 @@ class Roster
 
     /** Prefix of the volunteer's message to the lead in their comment on their shift entry */
     protected const REASON_PREFIX = "Late or can't come: ";
+    /** What 1.0 wrote, still read for cancellations made before the update */
+    protected const OLD_REASON_PREFIX = "Can't make it: ";
     protected const REASON_LENGTH = 200;
     public const ALREADY_ON_SHIFT = 'already on this shift';
     /** A standby shift that starts within this time can give replacements already */
@@ -485,8 +487,10 @@ class Roster
     public static function cancelReason(ShiftEntry $entry): string
     {
         foreach (preg_split('/\R/', (string) $entry->user_comment) as $line) {
-            if (str_starts_with($line, self::REASON_PREFIX)) {
-                return substr($line, strlen(self::REASON_PREFIX));
+            foreach ([self::REASON_PREFIX, self::OLD_REASON_PREFIX] as $prefix) {
+                if (str_starts_with($line, $prefix)) {
+                    return substr($line, strlen($prefix));
+                }
             }
         }
 
