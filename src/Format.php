@@ -16,8 +16,8 @@ class Format
     /** Telegram takes up to 4096 characters; this leaves room for a note put in front */
     public const TEXT_BUDGET = 3500;
 
-    /** Telegram allows 100 buttons per message, two per person in a roll call */
-    public const MAX_LISTED = 40;
+    /** Telegram allows 100 buttons per message, up to three per person in a roll call */
+    public const MAX_LISTED = 33;
 
     /** @var array<int, string|null> Telegram handles by user id, see loadHandles() */
     protected array $handles = [];
@@ -28,7 +28,7 @@ class Format
         $location = $shift->location;
 
         $lines = [sprintf('🗓 <b>%s</b> · %s', e($shift->title), $this->shiftTime($shift))];
-        $place = '📍 Meet at <b>' . e($location->name) . '</b>';
+        $place = '📍 <b>' . e($location->name) . '</b>';
         if ($location->description) {
             $place .= ' — ' . e($this->cut(trim(strip_tags($location->description)), 300));
         }

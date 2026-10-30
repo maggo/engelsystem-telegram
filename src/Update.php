@@ -54,7 +54,8 @@ class Update extends BaseModel
 
     public static function processed(int $updateId): void
     {
-        self::query()->whereKey($updateId)->update(['processed_at' => Carbon::now()]);
+        // The payload is only kept for a retry; it can hold a cancellation reason
+        self::query()->whereKey($updateId)->update(['processed_at' => Carbon::now(), 'payload' => '']);
     }
 
     /**

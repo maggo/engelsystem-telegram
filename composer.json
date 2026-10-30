@@ -2,7 +2,7 @@
     "type": "engelsystem-plugin",
     "name": "telegram/plugin",
     "description": "Telegram login, onboarding, check-in and a shift bot for volunteers",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "license": "GPL-2.0-or-later",
     "homepage": "https://github.com/maggo/engelsystem-telegram",
     "extra": {
@@ -19,9 +19,18 @@
                     },
                     "telegram_client_secret": {
                         "type": "password"
+                    },
+                    "telegram_standby_area": {
+                        "type": "string"
+                    },
+                    "telegram_meeting_place": {
+                        "type": "string"
                     }
                 }
             }
+        },
+        "event_handlers": {
+            "news.created": "Telegram\\Plugin\\NewsNotification@created"
         },
         "providers": [
             "Telegram\\Plugin\\ServiceProvider"
@@ -36,6 +45,10 @@
             "/admin/telegram/dashboard.js": "Telegram\\Plugin\\AdminController@dashboardScript",
             "/admin/telegram/import": [
                 "Telegram\\Plugin\\AdminController@import",
+                "POST"
+            ],
+            "/admin/telegram/import-shifts": [
+                "Telegram\\Plugin\\AdminController@importShifts",
                 "POST"
             ],
             "/admin/telegram/unlink": [

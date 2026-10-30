@@ -83,11 +83,19 @@
             <div class="col-md-4 align-self-end">{{ f.submit(__('telegram.admin.unlink'), {'btn_type': 'danger'}) }}</div>
         </form>
 
+        <h2 class="h4">{{ __('telegram.admin.import_shifts.title') }}</h2>
+        <p>{{ __('telegram.admin.import_shifts.info') }}</p>
+        <form action="{{ url('/admin/telegram/import-shifts') }}" method="post" class="mb-5">
+            {{ csrf() }}
+            {{ f.textarea('csv', 'CSV', {'rows': 6, 'placeholder': 'title,area,location,start,end,needed\nInfo Desk AM,Info Desk,Info Desk,2027-08-17 08:00,2027-08-17 14:00,8\nKitchen PM,Kitchen,Kitchen,2027-08-17 13:00,2027-08-17 19:00,5'}) }}
+            {{ f.submit(__('telegram.admin.import_shifts')) }}
+        </form>
+
         <h2 class="h4">{{ __('telegram.admin.import.title') }}</h2>
         <p>{{ __('telegram.admin.import.info') }}</p>
         <form action="{{ url('/admin/telegram/import') }}" method="post" class="mb-5">
             {{ csrf() }}
-            {{ f.textarea('csv', 'CSV', {'rows': 6, 'placeholder': 'handle,name,area,shifts,lead\ntelegram_handle,Full name,Registration,2026-11-03 AM; 2026-11-04 AM,\nlead_handle,Full name,Registration,2026-11-03 AM,yes'}) }}
+            {{ f.textarea('csv', 'CSV', {'rows': 6, 'placeholder': 'handle,name,area,shifts,lead\ntelegram_handle,Full name,Info Desk,2027-08-17 AM; 2027-08-18 AM; 2027-08-19 PM Kitchen,\nlead_handle,Full name,Info Desk,2027-08-17 AM,yes'}) }}
             {{ f.submit(__('telegram.admin.import')) }}
         </form>
     </div>
