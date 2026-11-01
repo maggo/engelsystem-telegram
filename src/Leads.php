@@ -209,18 +209,18 @@ class Leads
             count($today)
         )];
         $lines[] = '';
-        // Big teams: only list who is still missing, the message would get too long otherwise
-        $listed = $members->count() > 30 ? $notOnboarded : $members;
-        if ($listed->isEmpty()) {
+        if ($notOnboarded->isEmpty()) {
             $lines[] = '🎉 Everyone has completed onboarding.';
         }
+        // Everyone, onboarded first; no buttons here, so only the text length limits it
+        $listed = $members->filter(fn(User $member) => $member->state->arrived)->concat($notOnboarded);
         $this->format->addWithin($lines, $listed->map(fn(User $member) => sprintf(
             '%s %s%s%s',
             $member->state->arrived ? '✅' : '⏳',
             $this->format->user($member),
             in_array($member->id, $supporters) ? ' (lead)' : '',
             in_array($member->id, $today) ? ' · 📍 here' : ''
-        ))->values()->all(), '…and %d more, see the dashboard in Engelsystem.');
+        ))->values()->all(), '…and %d more, see the dashboard in Engelsystem.', 300, PHP_INT_MAX);
         $lines[] = '';
         $lines[] = '✅ onboarding complete · ⏳ not yet · 📍 checked in today';
 

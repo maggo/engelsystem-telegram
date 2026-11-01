@@ -129,19 +129,25 @@ class Format
 
     /**
      * Adds lines while the message stays within TEXT_BUDGET (minus $reserve for what follows)
-     * and MAX_LISTED, then a note how many were left out
+     * and $max items, then a note how many were left out
      *
      * @param string[] $lines the message so far, extended in place
      * @param string[] $items one line each
+     * @param int $max MAX_LISTED for lists with buttons per item
      * @return int how many items were added
      */
-    public function addWithin(array &$lines, array $items, string $more, int $reserve = 300): int
-    {
+    public function addWithin(
+        array &$lines,
+        array $items,
+        string $more,
+        int $reserve = 300,
+        int $max = self::MAX_LISTED
+    ): int {
         $used = $this->length(implode("\n", $lines));
         $added = 0;
         foreach ($items as $item) {
             $length = $this->length($item) + 1;
-            if ($added >= self::MAX_LISTED || $used + $length + $reserve > self::TEXT_BUDGET) {
+            if ($added >= $max || $used + $length + $reserve > self::TEXT_BUDGET) {
                 break;
             }
             $lines[] = $item;
