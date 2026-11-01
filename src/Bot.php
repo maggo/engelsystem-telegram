@@ -488,19 +488,18 @@ class Bot
     }
 
     /**
-     * A new news, as Engelsystem's e-mail would announce it: title, the part before [more], a link
+     * A new news: title and the whole text, so nobody has to open Engelsystem for the rest
      *
      * @return bool false if Telegram was unavailable and it should be sent again later
      */
     public function sendNews(News $news, int|string $chatId): bool
     {
-        $text = trim(strip_tags($news->text(false)));
+        $text = trim(strip_tags($news->text()));
         $sent = $this->api->send($chatId, sprintf(
-            "%s <b>%s</b>\n\n%s\n\n<a href=\"%s\">Read it in Engelsystem</a>",
+            "%s <b>%s</b>\n\n%s",
             $news->is_meeting ? '📅' : '📣',
             e($news->title),
-            e($this->format->cut($text, 1500)),
-            e(url('/news/' . $news->id))
+            e($this->format->cut($text, 3500))
         ));
 
         return $sent !== null || !$this->api->failedTemporarily();
