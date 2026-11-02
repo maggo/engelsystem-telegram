@@ -132,6 +132,61 @@ class Bot
             default                            => $this->receiveReason($chatId, $user, $text, $message['reply_to_message']['message_id'] ?? null)
                 || $this->welcome($chatId, $user),
         };
+
+        // After the answer, so it isn't kept waiting; picks up areas led or given up since
+        $this->setCommandsFor($chatId, $user);
+    }
+
+    /**
+     * The command menu everyone sees, and for each connected lead and coordinator the commands
+     * only they can use (setCommandsFor()); the commands check the permission themselves
+     */
+    public function setCommands(): void
+    {
+        $everyone = $this->commandsFor(null);
+        $this->api->call('setMyCommands', ['commands' => $everyone]);
+
+        $accounts = TelegramAccount::query()->with('user')->whereNotNull('chat_id')->get();
+        foreach ($accounts as $account) {
+            if ($account->user && $this->commandsFor($account->user) !== $everyone) {
+                $this->setCommandsFor($account->chat_id, $account->user);
+            }
+        }
+    }
+
+    /**
+     * Gives a chat the commands its user can use, or back the menu everyone sees
+     */
+    protected function setCommandsFor(int|string $chatId, User $user): void
+    {
+        $scope = ['type' => 'chat', 'chat_id' => $chatId];
+        $commands = $this->commandsFor($user);
+
+        $commands === $this->commandsFor(null)
+            ? $this->api->call('deleteMyCommands', ['scope' => $scope])
+            : $this->api->call('setMyCommands', ['commands' => $commands, 'scope' => $scope]);
+    }
+
+    /**
+     * The same commands /start lists (welcome())
+     *
+     * @return array<array{command: string, description: string}>
+     */
+    protected function commandsFor(?User $user): array
+    {
+        $commands = [['command' => 'shifts', 'description' => 'Your upcoming shifts']];
+        if (!$user) {
+            return $commands;
+        }
+
+        if (Roster::areasLedBy($user)) {
+            $commands[] = ['command' => 'team', 'description' => 'Your team: onboarding and check-ins'];
+            $commands[] = ['command' => 'gaps', 'description' => 'Open slots in your area today and tomorrow'];
+        } elseif (Roster::isCoordinator($user)) {
+            $commands[] = ['command' => 'gaps', 'description' => 'Open slots today and tomorrow'];
+        }
+
+        return $commands;
     }
 
     /**

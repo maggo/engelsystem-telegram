@@ -204,11 +204,7 @@ class AdminController extends BaseController
             // Each update keeps a PHP worker busy for a moment; leave enough for the website
             'max_connections' => 8,
         ]);
-        $this->bot->api()->call('setMyCommands', ['commands' => [
-            ['command' => 'shifts', 'description' => 'Your upcoming shifts'],
-            ['command' => 'team', 'description' => 'Leads: your team, onboarding and check-ins'],
-            ['command' => 'gaps', 'description' => 'Leads: open slots today and tomorrow'],
-        ]]);
+        $this->bot->setCommands();
 
         $this->addNotification(
             $ok ? 'Bot connected to ' . $this->url->to(BotController::WEBHOOK_PATH) : 'Connecting the bot failed, see log.',
