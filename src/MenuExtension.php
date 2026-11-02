@@ -20,6 +20,7 @@ class MenuExtension extends AbstractExtension
     /** @var array<string, array{string, string}> translation key => [path, permission] */
     protected const ADMIN_PAGES = [
         'telegram.dashboard.title' => ['/admin/telegram/dashboard', 'admin_user'],
+        'telegram.swap.title'      => ['/admin/telegram/swap', 'admin_user'],
         'telegram.admin.title'     => ['/admin/telegram', 'admin_user'],
     ];
 

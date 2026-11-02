@@ -435,7 +435,11 @@ class Leads
     public function markHere(int|string $chatId, ?int $messageId, User $lead, int $entryId): void
     {
         $entry = ShiftEntry::query()->with('shift')->find($entryId);
-        if (!$entry || !$this->canRollCall($lead, $entry)) {
+        if (!$entry) {
+            $this->entryGone($chatId);
+            return;
+        }
+        if (!$this->canRollCall($lead, $entry)) {
             return;
         }
 
@@ -446,10 +450,26 @@ class Leads
         $this->api->edit($chatId, $messageId, $text, $buttons);
     }
 
+    /**
+     * A roll call button for someone no longer on the shift: moved by coordination (Swap people), as
+     * a replacement, or removed in Engelsystem; the entry is gone, and with it which shift it was
+     */
+    protected function entryGone(int|string $chatId): void
+    {
+        $this->api->send(
+            $chatId,
+            'That person isn\'t on this shift any more, they were moved or removed. /rollcall shows who is on it now.'
+        );
+    }
+
     public function markNoShow(int|string $chatId, ?int $messageId, User $lead, int $entryId): void
     {
         $entry = ShiftEntry::query()->with(['shift', 'user'])->find($entryId);
-        if (!$entry || !$this->canRollCall($lead, $entry)) {
+        if (!$entry) {
+            $this->entryGone($chatId);
+            return;
+        }
+        if (!$this->canRollCall($lead, $entry)) {
             return;
         }
 

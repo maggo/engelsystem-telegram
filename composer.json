@@ -43,6 +43,12 @@
             "/admin/telegram": "Telegram\\Plugin\\AdminController@index",
             "/admin/telegram/dashboard": "Telegram\\Plugin\\AdminController@dashboard",
             "/admin/telegram/dashboard.js": "Telegram\\Plugin\\AdminController@dashboardScript",
+            "/admin/telegram/swap": "Telegram\\Plugin\\AdminController@swap",
+            "/admin/telegram/swap.js": "Telegram\\Plugin\\AdminController@swapScript",
+            "/admin/telegram/swap/move": [
+                "Telegram\\Plugin\\AdminController@swapMove",
+                "POST"
+            ],
             "/admin/telegram/import": [
                 "Telegram\\Plugin\\AdminController@import",
                 "POST"

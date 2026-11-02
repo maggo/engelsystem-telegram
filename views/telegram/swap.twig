@@ -1,0 +1,122 @@
+{% extends 'layouts/app.twig' %}
+
+{% block title %}{{ __('telegram.swap.title') }}{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-3 gap-2">
+            <h1 class="mb-0">{{ block('title') }}</h1>
+            <span class="text-muted small">
+                <a href="{{ url('/admin/telegram/dashboard') }}">{{ __('telegram.dashboard.title') }}</a>
+            </span>
+        </div>
+        {% include 'layouts/parts/messages.twig' %}
+
+        <p class="text-muted">
+            Moves people between two shifts of the same half day: tick people on either shift, and the button
+            moves each of them to the other one. They join the area they move to, and the bot tells them, the
+            leads of both shifts and coordination. Under <i>Other shift</i>, the free volunteers are everyone in
+            an area who isn't on a shift at that time: moving them adds them, moving someone there takes them off.
+        </p>
+
+        {% if not days %}
+            <div class="alert alert-info">No shifts to come.</div>
+        {% else %}
+            <form method="get" action="{{ url('/admin/telegram/swap') }}" id="swap-pick" class="row g-2 align-items-end mb-4">
+                <div class="col-auto">
+                    <label class="form-label" for="swap-day">Day</label>
+                    <select class="form-select" name="day" id="swap-day">
+                        {% for value, label in days %}
+                            <option value="{{ value }}" {{ value == day ? 'selected' }}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <div class="btn-group" role="group" aria-label="Half day">
+                        {% for option in ['AM', 'PM'] %}
+                            <input type="radio" class="btn-check" name="half" value="{{ option }}" id="swap-{{ option }}" {{ option == half ? 'checked' }}>
+                            <label class="btn btn-outline-primary" for="swap-{{ option }}">{{ option }}</label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% for side, label in {'left': 'Shift', 'right': 'Other shift'} %}
+                    <div class="col-md">
+                        <label class="form-label" for="swap-{{ side }}">{{ label }}</label>
+                        <select class="form-select" name="{{ side }}" id="swap-{{ side }}">
+                            {% for key, name in sides %}
+                                <option value="{{ key }}" {{ key == _context[side] ? 'selected' }}>{{ name }}</option>
+                            {% endfor %}
+                            {% if side == 'right' %}
+                                <option value="{{ free }}" {{ right == free ? 'selected' }}>{{ free_name }}</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                {% endfor %}
+                <noscript>
+                    <div class="col-auto"><button type="submit" class="btn btn-secondary">Show</button></div>
+                </noscript>
+            </form>
+
+            {% if not sides %}
+                <div class="alert alert-info">No shifts in this half day.</div>
+            {% elseif not picked %}
+                <div class="alert alert-info">Pick two different shifts.</div>
+            {% else %}
+                <form method="post" action="{{ url('/admin/telegram/swap/move') }}" id="swap-form">
+                    {{ csrf() }}
+                    <input type="hidden" name="day" value="{{ day }}">
+                    <input type="hidden" name="half" value="{{ half }}">
+                    <input type="hidden" name="left" value="{{ left }}">
+                    <input type="hidden" name="right" value="{{ right }}">
+
+                    <div class="row g-4">
+                        {% for side, column in picked %}
+                            <div class="col-md-6">
+                                <h2 class="h5 mb-1">{{ column.name }}</h2>
+                                <p class="small text-muted mb-2"
+                                   data-side="{{ side }}" data-name="{{ column.name }}"
+                                   data-filled="{{ column.filled }}" data-needed="{{ column.needed }}">
+                                    {{ column.time }} · {{ column.filled }}{% if column.needed is not null %}/{{ column.needed }}{% endif %}
+                                    {% if column.over %}<span class="badge bg-secondary">over</span>{% endif %}
+                                </p>
+                                {% if column.needed is null and column.people %}
+                                    <input type="search" class="form-control form-control-sm mb-2" data-filter="{{ side }}"
+                                           placeholder="Search by name" aria-label="Search {{ column.name }}">
+                                {% endif %}
+                                <ul class="list-group" data-list="{{ side }}">
+                                    {% for person in column.people %}
+                                        <li class="list-group-item d-flex gap-2 align-items-start {{ person.no_show ? 'text-muted' }}">
+                                            <input class="form-check-input flex-shrink-0 mt-1" type="checkbox"
+                                                   name="from_{{ side }}[]" value="{{ person.id }}" id="swap-{{ side }}-{{ person.id }}"
+                                                   {{ person.no_show or column.over ? 'disabled' }}>
+                                            <label class="form-check-label flex-grow-1" for="swap-{{ side }}-{{ person.id }}">
+                                                {% if person.lead %}👤 {% endif %}{{ person.name }}
+                                                {% if person.handle and person.handle|lower != person.name|lower %}
+                                                    <span class="text-muted">@{{ person.handle }}</span>
+                                                {% endif %}
+                                                {% if person.checked_in %}📍{% endif %}
+                                                {% if person.no_show %}<span class="badge bg-danger">no-show</span>{% endif %}
+                                                {% if not person.onboarded %}<span class="badge bg-warning text-dark">not onboarded</span>{% endif %}
+                                                {% if not person.telegram %}<span class="small text-muted">· not on Telegram</span>{% endif %}
+                                            </label>
+                                        </li>
+                                    {% else %}
+                                        <li class="list-group-item text-muted">{{ column.needed is null ? 'Nobody free.' : 'Nobody on this shift.' }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="sticky-bottom bg-body border-top py-3 mt-3 d-flex flex-wrap gap-3 align-items-center">
+                        <button type="submit" class="btn btn-primary" id="swap-button">Move the ticked people</button>
+                        <span class="small text-muted" id="swap-after"></span>
+                    </div>
+                    <p class="small text-muted mt-2">👤 lead · 📍 checked in today. No-shows stay where they are.</p>
+                </form>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <script src="{{ url('/admin/telegram/swap.js') }}"></script>
+{% endblock %}

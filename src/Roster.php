@@ -359,21 +359,7 @@ class Roster
                 return self::standbyName() !== '' ? 'not on standby right now' : 'not a free member of this area';
             }
 
-            // As in Engelsystem, a lead only puts members of their area on its shifts: they join it,
-            // the way a lead adds someone to their area there (confirmed right away)
-            if (!$user->userAngelTypes()->wherePivot('angel_type_id', $angelTypeId)->exists()) {
-                UserAngelType::query()->create([
-                    'user_id'         => $user->id,
-                    'angel_type_id'   => $angelTypeId,
-                    'confirm_user_id' => $user->id,
-                    'supporter'       => false,
-                ]);
-                self::log(sprintf(
-                    'User %s added to angel type %s, confirmed: true, supporter: false.',
-                    $user->name,
-                    AngelType::query()->find($angelTypeId)?->name
-                ));
-            }
+            self::join($user, $angelTypeId);
 
             foreach ($standby as $entry) {
                 self::unassign($entry, sprintf(
@@ -386,6 +372,29 @@ class Roster
 
             return self::assign($user, $shift, $angelTypeId, $by);
         });
+    }
+
+    /**
+     * As in Engelsystem, a lead only puts members of their area on its shifts: they join it, the
+     * way a lead adds someone to their area there (confirmed right away)
+     */
+    public static function join(User $user, int $angelTypeId): void
+    {
+        if ($user->userAngelTypes()->wherePivot('angel_type_id', $angelTypeId)->exists()) {
+            return;
+        }
+
+        UserAngelType::query()->create([
+            'user_id'         => $user->id,
+            'angel_type_id'   => $angelTypeId,
+            'confirm_user_id' => $user->id,
+            'supporter'       => false,
+        ]);
+        self::log(sprintf(
+            'User %s added to angel type %s, confirmed: true, supporter: false.',
+            $user->name,
+            AngelType::query()->find($angelTypeId)?->name
+        ));
     }
 
     public static function assign(User $user, Shift $shift, int $angelTypeId, string $by): ShiftEntry

@@ -19,6 +19,8 @@ use Engelsystem\Http\Response;
 use Engelsystem\Http\UrlGenerator;
 use Engelsystem\Models\OAuth;
 use Engelsystem\Models\User\User;
+use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
 
 /**
  * Bot setup, the volunteer import, the QR codes and the dashboard for coordinators
@@ -36,7 +38,9 @@ class AdminController extends BaseController
         protected Redirector $redirect,
         protected Bot $bot,
         protected Authenticator $auth,
-        protected UrlGenerator $url
+        protected UrlGenerator $url,
+        protected Swap $swap,
+        protected LoggerInterface $log
     ) {
     }
 
@@ -181,9 +185,70 @@ class AdminController extends BaseController
      */
     public function dashboardScript(): Response
     {
+        return $this->script('dashboard.js');
+    }
+
+    /**
+     * Swapping people between two shifts of the same half day, see Swap
+     */
+    public function swap(Request $request): Response
+    {
+        return $this->response->withView('telegram/swap', Swap::data(
+            $request->get('day'),
+            $request->get('half'),
+            $request->get('left'),
+            $request->get('right')
+        ));
+    }
+
+    public function swapScript(): Response
+    {
+        return $this->script('swap.js');
+    }
+
+    public function swapMove(Request $request): Response
+    {
+        $left = (string) $request->postData('left');
+        $right = (string) $request->postData('right');
+        try {
+            $by = $this->auth->user();
+            $result = $this->swap->run(
+                $left,
+                $right,
+                $request->request->all('from_left'),
+                $request->request->all('from_right'),
+                $by
+            );
+            AfterResponse::run($this->log, 'Swap messages', fn() => $this->swap->tell($result, $by));
+
+            $this->addNotification(sprintf(
+                'Moved %s. The bot tells them, the leads of both shifts and coordination.',
+                Swap::summary($result)
+            ));
+            if ($unreachable = Swap::unreachable($result)) {
+                $this->addNotification(
+                    'Not on Telegram, please tell them directly: '
+                    . implode(', ', array_map(fn(User $user) => $user->displayName, $unreachable)),
+                    NotificationType::WARNING
+                );
+            }
+        } catch (InvalidArgumentException $e) {
+            $this->addNotification($e->getMessage(), NotificationType::ERROR);
+        }
+
+        return $this->redirect->to($this->url->to('/admin/telegram/swap', [
+            'day'   => $request->postData('day'),
+            'half'  => $request->postData('half'),
+            'left'  => $left,
+            'right' => $right,
+        ]));
+    }
+
+    protected function script(string $file): Response
+    {
         return $this->response
             ->withHeader('Content-Type', 'text/javascript')
-            ->withContent((string) file_get_contents(__DIR__ . '/../resources/dashboard.js'));
+            ->withContent((string) file_get_contents(__DIR__ . '/../resources/' . $file));
     }
 
     /**
