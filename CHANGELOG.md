@@ -4,6 +4,37 @@ Each release is tagged `vX.Y.Z`, matching `version` in `composer.json`. Releases
 migrations or new settings say so, as they need **Admin > Plugins > Telegram > Update** or an
 admin entering something.
 
+## 1.2.0 (2026-11-02)
+
+- **Tested against:** Engelsystem `main` at `f09f95ec`.
+- **No migration, no new settings.**
+- **Swap people:** Admin > *Swap people* (coordinators only) shows two shifts of the same day and
+  half day side by side, by default an area and standby, or an area and the free volunteers.
+  Ticked people move to the other side, all or nothing; they join the area they move to. Moves
+  onto a shift at the same time as another of the person's shifts are refused. The bot tells the
+  people moved, the leads of both shifts and coordination; people not on Telegram are listed.
+- **`/rollcall`:** a lead's roll call of their current or next shift, any time, also for a lead
+  added later. *Is here* works any time; *No-show* once the roll call is out, 15 minutes before
+  the shift. The roll call lists everyone until a lead marks them here; the daily check-in only
+  shows as 📍.
+- **`/roster`:** an area's shifts for a day (up to a week ahead): staffing, leads, everyone on
+  the shift, who checked in, who isn't onboarded, no-shows. Coordinators see every area.
+- **Times:** the bot shows every shift starting an hour before its real start (the end stays).
+  The reminder goes out three hours before the real start and asks people to scan the QR code at
+  the check-in desk, then be at the meeting place by the start it shows.
+- **Removed:** the reminder's *Notify your lead* button and the Excuse / Not excused decision.
+  Volunteers message their lead directly; the reminder names the lead with their handle. Buttons
+  on older messages do nothing.
+- **Dashboard:** one list of shifts from now until the end of tomorrow with open slots or, today,
+  people not checked in at the desk, with who is missing; readable in dark themes.
+- **Bot:** `/start` and `/shifts` list every upcoming shift; `/team` lists every member; the
+  command menu shows `/team`, `/gaps`, `/rollcall` and `/roster` only to leads and coordinators;
+  news on Telegram carry the whole text.
+- **Fixes:** no gap alert for a no-show on a shift that is over; someone who hasn't started the
+  bot is no longer connected from a group, which lost their reminders; the volunteer import flags
+  rows that only matched an Engelsystem username; the admin page and QR codes don't wait for
+  Telegram.
+
 ## 1.1.0 (2026-10-30)
 
 - **Tested against:** Engelsystem `main` at `f09f95ec`.

@@ -2,7 +2,7 @@
     "type": "engelsystem-plugin",
     "name": "telegram/plugin",
     "description": "Telegram login, onboarding, check-in and a shift bot for volunteers",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "license": "GPL-2.0-or-later",
     "homepage": "https://github.com/maggo/engelsystem-telegram",
     "extra": {
