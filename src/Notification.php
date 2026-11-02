@@ -34,8 +34,9 @@ class Notification extends BaseModel
     public const CANT = 'cant';
     public const EXCUSED = 'excused';
     public const UNEXCUSED = 'unexcused';
-    /** Picked as a replacement: being checked in for the day doesn't count until the lead saw them there */
+    /** Picked as a replacement shortly before the shift, so no reminder; the roll call says so */
     public const MOVED = 'moved';
+    /** Marked here by the lead in the roll call; the daily check-in at the desk doesn't count */
     public const HERE = 'here';
 
     public $table = 'telegram_notifications'; // phpcs:ignore

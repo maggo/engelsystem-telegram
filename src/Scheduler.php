@@ -16,7 +16,7 @@ use Throwable;
 /**
  * Time-based bot messages:
  * - Pre-shift ping: 2 hours before start, to everyone on the shift (also when checked in already)
- * - Roll call: 15 minutes before the shift starts, leads get the list of people still not checked in
+ * - Roll call: 15 minutes before the shift starts, leads get everyone on the shift to confirm
  * - News: new news with "Send notification" ticked, to everyone (NewsNotification)
  *
  * Every message is claimed before it is sent and marked as sent afterwards (Notification), and

@@ -79,11 +79,10 @@ class Leads
             ->whereIn('user_id', $entries->pluck('user_id'))
             ->pluck('answer', 'user_id');
 
-        // A replacement, or someone who wrote they're late or can't come, isn't here until the lead says
-        // so, even if checked in for the day
+        // Nobody is here until the lead says so; the daily check-in at the desk only says who is in
+        // the building (📍)
         $missing = $entries->filter(fn(ShiftEntry $entry) => !$entry->freeloaded_by
-            && (!in_array($entry->user_id, $checkedIn)
-                || in_array($answers[$entry->user_id] ?? null, [Notification::MOVED, Notification::CANT])));
+            && ($answers[$entry->user_id] ?? null) !== Notification::HERE);
         $noShows = $entries->filter(fn(ShiftEntry $entry) => (bool) $entry->freeloaded_by);
         $staffing = Roster::staffing($shift, $angelTypeId);
 
@@ -114,15 +113,19 @@ class Leads
         $buttons = [];
         if ($missing->isNotEmpty()) {
             $lines[] = '';
-            $lines[] = '<b>Not checked in:</b>';
+            $lines[] = '<b>To confirm:</b>';
             $missing = $missing->values();
             $note = fn(ShiftEntry $entry) => match ($answers[$entry->user_id] ?? null) {
-                Notification::MOVED => ' — replacement, not seen here yet',
+                Notification::MOVED => ' — replacement',
                 Notification::CANT  => ' — wrote: "' . e($this->format->cut(Roster::cancelReason($entry), 80)) . '"',
                 default             => '',
             };
-            $names = $missing->map(fn(ShiftEntry $entry) => '• ' . $this->format->user($entry->user) . $note($entry));
+            $names = $missing->map(fn(ShiftEntry $entry) => '• ' . $this->format->user($entry->user)
+                . (in_array($entry->user_id, $checkedIn) ? ' 📍' : '') . $note($entry));
             $listed = $this->format->addWithin($lines, $names->all(), '…and %d more, see the shift in Engelsystem.', 500);
+            if ($missing->take($listed)->contains(fn(ShiftEntry $entry) => in_array($entry->user_id, $checkedIn))) {
+                $lines[] = '📍 = checked in at the desk today';
+            }
             foreach ($missing->take($listed) as $entry) {
                 $answer = $answers[$entry->user_id] ?? null;
                 $buttons[] = [
@@ -335,15 +338,8 @@ class Leads
             return;
         }
 
-        Checkin::record($entry->user_id, $entry->shift->start);
-        $answer = Notification::query()
-            ->where('kind', Notification::PRESHIFT)
-            ->where('shift_id', $entry->shift_id)
-            ->where('user_id', $entry->user_id)
-            ->value('answer');
-        if (in_array($answer, [Notification::MOVED, Notification::CANT])) {
-            Notification::answer($entry, Notification::HERE);
-        }
+        // Only the roll call remembers it; Engelsystem records no-shows, not who was there
+        Notification::answer($entry, Notification::HERE);
 
         [$text, $buttons] = $this->rollCallMessage($entry->shift, $entry->angel_type_id);
         $this->api->edit($chatId, $messageId, $text, $buttons);
@@ -510,8 +506,8 @@ class Leads
             return;
         }
         $staffing = Roster::staffing($shift, $angelTypeId);
-        // Checked in for the day, but not seen at this shift yet: the roll call asks the lead. For a
-        // later shift they get the usual reminder instead (MOVED counts as answered)
+        // The roll call shows them as a replacement. For a later shift they get the usual reminder
+        // instead (MOVED counts as answered)
         if ($shift->start <= Carbon::now()->addMinutes(Scheduler::PRESHIFT_MINUTES)) {
             Notification::answer($entry, Notification::MOVED);
         }
