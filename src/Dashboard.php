@@ -7,13 +7,15 @@ namespace Telegram\Plugin;
 use Carbon\Carbon;
 use Engelsystem\Models\AngelType;
 use Engelsystem\Models\Shifts\Shift;
+use Engelsystem\Models\Shifts\ShiftEntry;
 use Engelsystem\Models\User\User;
 use Engelsystem\Models\UserAngelType;
 use Illuminate\Support\Collection;
 
 /**
- * Open slots today and tomorrow (like /gaps) and onboarding progress per area (who connected
- * Telegram, which Engelsystem can't show); shifts, goodies and the log are Engelsystem's own pages
+ * Open slots today and tomorrow (like /gaps), today's check-ins and onboarding progress per area
+ * (who checked in or connected Telegram, which Engelsystem can't show); shifts, goodies and the
+ * log are Engelsystem's own pages
  */
 class Dashboard
 {
@@ -24,6 +26,7 @@ class Dashboard
         return [
             'now'        => $now,
             'gaps'       => self::gaps($now),
+            'checkins'   => self::checkins($now),
             'onboarding' => self::onboarding(),
             'log_prefix' => Roster::LOG_PREFIX,
         ];
@@ -44,6 +47,57 @@ class Dashboard
                 default                                           => '',
             }])
             ->values();
+    }
+
+    /**
+     * Per area: who has a shift starting today and who of them checked in at the desk today, and
+     * who is still missing with their first shift; people with shifts in several areas count in each
+     *
+     * @return array{areas: array, total: array{people: int, checked_in: int, without_shift: int}}
+     */
+    protected static function checkins(Carbon $now): array
+    {
+        $entries = ShiftEntry::query()
+            ->with(['shift', 'user.personalData'])
+            ->whereHas('shift', fn($q) => $q->whereBetween('start', [
+                $now->copy()->startOfDay(),
+                $now->copy()->endOfDay(),
+            ]))
+            ->get()
+            ->sortBy(fn(ShiftEntry $entry) => $entry->shift->start);
+        $checkedIn = Checkin::query()->where('day', $now->toDateString())->pluck('user_id');
+        $accounts = TelegramAccount::query()->whereIn('user_id', $entries->pluck('user_id'))->get()->keyBy('user_id');
+        $leads = UserAngelType::query()->where('supporter', true)->get();
+
+        $areas = [];
+        $byArea = $entries->groupBy('angel_type_id');
+        foreach (AngelType::query()->orderBy('name')->get() as $area) {
+            if (!$byArea->has($area->id)) {
+                continue;
+            }
+            // First shift today per person, as entries are sorted by start; so is the missing list
+            $people = $byArea->get($area->id)->unique('user_id')->map(fn(ShiftEntry $entry) => [
+                'user'       => $entry->user,
+                'handle'     => $accounts->get($entry->user_id)?->username,
+                'lead'       => $leads->contains(fn(UserAngelType $lead) => $lead->user_id === $entry->user_id
+                    && $lead->angel_type_id === $area->id),
+                'shift'      => $entry->shift,
+                'checked_in' => $checkedIn->contains($entry->user_id),
+            ]);
+            $areas[] = [
+                'name'       => $area->name,
+                'people'     => $people->count(),
+                'checked_in' => $people->where('checked_in', true)->count(),
+                'missing'    => $people->reject(fn(array $person) => $person['checked_in'])->values(),
+            ];
+        }
+
+        $onShift = $entries->pluck('user_id')->unique();
+        return ['areas' => $areas, 'total' => [
+            'people'        => $onShift->count(),
+            'checked_in'    => $onShift->intersect($checkedIn)->count(),
+            'without_shift' => $checkedIn->diff($onShift)->count(),
+        ]];
     }
 
     /**

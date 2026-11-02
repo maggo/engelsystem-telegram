@@ -46,6 +46,66 @@
             </div>
         {% endif %}
 
+        {# Check-ins #}
+        {% set total = checkins.total %}
+        <h2 class="h4">Checked in today</h2>
+        {% if not checkins.areas %}
+            <p class="mb-5">No shifts today.</p>
+        {% else %}
+            <p>
+                <b>{{ total.checked_in }}</b> of {{ total.people }} with a shift today checked in ·
+                <b>{{ total.people - total.checked_in }}</b> not yet{% if total.without_shift %} ·
+                {{ total.without_shift }} checked in without a shift today{% endif %}
+            </p>
+            <div class="table-responsive mb-2">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr><th>Area</th><th class="text-end">On shift today</th><th class="text-end">Checked in</th><th class="text-end">Missing</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for area in checkins.areas %}
+                            <tr>
+                                <td>{{ area.name }}</td>
+                                <td class="text-end">{{ area.people }}</td>
+                                <td class="text-end">{{ area.checked_in }}</td>
+                                <td class="text-end {{ area.missing|length ? 'text-danger fw-bold' : 'text-success' }}">{{ area.missing|length }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% for area in checkins.areas|filter(area => area.missing|length) %}
+                <details class="mb-2">
+                    <summary>{{ area.name }}: {{ area.missing|length }} not checked in</summary>
+                    <table class="table table-sm align-middle mt-2">
+                        <tbody>
+                            {% for person in area.missing %}
+                                <tr>
+                                    <td>
+                                        {{ person.user.displayName }}{% if person.lead %} <span class="badge bg-info">lead</span>{% endif %}
+                                        <br><span class="small text-muted">
+                                            first shift
+                                            <a href="{{ url('/shifts', {'action': 'view', 'shift_id': person.shift.id}) }}">{{ person.shift.start.format('H:i') }}</a>
+                                            {{ person.shift.title }}
+                                        </span>
+                                    </td>
+                                    <td class="small">
+                                        {{ person.handle ? '@' ~ person.handle : person.user.name }} ·
+                                        <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">edit in Engelsystem</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </details>
+            {% endfor %}
+            <p class="small text-muted mb-5">
+                Check-in means they scanned today's QR code at the check-in desk. The lead's roll call
+                says who is actually at the shift.
+            </p>
+        {% endif %}
+
         {# Onboarding #}
         {% set total = onboarding.total %}
         <h2 class="h4">Onboarding</h2>
