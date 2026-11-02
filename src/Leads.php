@@ -122,11 +122,20 @@ class Leads
             if ($missing->take($listed)->contains(fn(ShiftEntry $entry) => in_array($entry->user_id, $checkedIn))) {
                 $lines[] = '📍 = checked in at the desk today';
             }
-            foreach ($missing->take($listed) as $entry) {
-                $buttons[] = [
-                    ['text' => '✅ ' . $this->format->shortName($entry->user) . ' is here', 'callback_data' => 'here:' . $entry->id],
-                    ['text' => '❌ No-show', 'callback_data' => 'ns:' . $entry->id],
-                ];
+            // Before the roll call is out (/rollcall early), nobody can be marked here or a no-show yet
+            if (Scheduler::rollCallStarted($shift)) {
+                foreach ($missing->take($listed) as $entry) {
+                    $buttons[] = [
+                        ['text' => '✅ ' . $this->format->shortName($entry->user) . ' is here', 'callback_data' => 'here:' . $entry->id],
+                        ['text' => '❌ No-show', 'callback_data' => 'ns:' . $entry->id],
+                    ];
+                }
+            } else {
+                $lines[] = '';
+                $lines[] = sprintf(
+                    '⏳ From %s you can mark people here or as no-show.',
+                    $shift->start->copy()->subMinutes(Scheduler::ROLLCALL_BEFORE_MINUTES)->format('H:i')
+                );
             }
         } elseif ($entries->count() > $noShows->count() && $staffing['filled'] >= $staffing['needed']) {
             // While short, the header ("all here") and the "short" line say it all
@@ -406,6 +415,29 @@ class Leads
         $this->api->edit($chatId, $messageId, ($note !== '' ? $note . "\n\n" : '') . $text, $buttons);
     }
 
+    /**
+     * /rollcall: the roll call of every shift the lead leads whose roll call is out, else of their
+     * next one; for a lead put on the shift after the roll call went out, or who lost the message.
+     * Coordinators lead every shift they are on.
+     */
+    public function rollCall(int|string $chatId, User $user): void
+    {
+        $led = Roster::upcoming($user)
+            ->filter(fn(ShiftEntry $entry) => !$entry->freeloaded_by && $this->canLead($user, $entry->angel_type_id))
+            ->values();
+        if ($led->isEmpty()) {
+            $this->api->send($chatId, 'You are not leading any upcoming shift. /shifts lists your shifts.');
+            return;
+        }
+
+        // At the handover, the shift ending and the one about to start
+        $out = $led->filter(fn(ShiftEntry $entry) => Scheduler::rollCallStarted($entry->shift));
+        foreach ($out->isNotEmpty() ? $out : $led->take(1) as $entry) {
+            [$text, $buttons] = $this->rollCallMessage($entry->shift, $entry->angel_type_id);
+            $this->api->send($chatId, $text, $buttons);
+        }
+    }
+
     public function assignReplacement(
         int|string $chatId,
         ?int $messageId,
@@ -613,5 +645,4 @@ class Leads
             && !$this->isOwn($lead, $entry)
             && Scheduler::rollCallStarted($entry->shift);
     }
-
 }

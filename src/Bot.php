@@ -124,6 +124,7 @@ class Bot
             $command === '/checkin'            => $this->checkin($chatId, $user, $args),
             $command === '/shifts'             => $this->shifts($chatId, $user),
             $command === '/team'               => $this->leads->teamPicker($chatId, $user),
+            $command === '/rollcall'           => $this->leads->rollCall($chatId, $user),
             $command === '/gaps'               => $this->leads->gaps($chatId, $user),
             default                            => $this->welcome($chatId, $user),
         };
@@ -174,6 +175,9 @@ class Bot
             return $commands;
         }
 
+        if (Roster::areasLedBy($user) || Roster::isCoordinator($user)) {
+            $commands[] = ['command' => 'rollcall', 'description' => 'Roll call of your current or next shift'];
+        }
         if (Roster::areasLedBy($user)) {
             $commands[] = ['command' => 'team', 'description' => 'Your team: onboarding and check-ins'];
             $commands[] = ['command' => 'gaps', 'description' => 'Open slots in your area today and tomorrow'];
@@ -287,6 +291,9 @@ class Bot
 
         $lines[] = '';
         $lines[] = '/shifts — your shifts with meeting points';
+        if (Roster::areasLedBy($user) || Roster::isCoordinator($user)) {
+            $lines[] = '/rollcall — roll call of the shift you lead now or next';
+        }
         if (Roster::areasLedBy($user)) {
             $lines[] = '/team — your team: who is onboarded and here today';
             $lines[] = '/gaps — open slots in your area';
@@ -527,5 +534,4 @@ class Bot
 
         return $sent !== null || !$this->api->failedTemporarily();
     }
-
 }

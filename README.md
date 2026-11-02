@@ -4,7 +4,7 @@ Runs volunteer shifts over Telegram, on top of an unchanged [Engelsystem](https:
 
 - **Login:** "Log in with Telegram" on the website.
 - **Volunteers:** their shifts and meeting points in the bot, a reminder two hours before each shift (with where to meet an hour before it).
-- **Leads** (supporters of an area): team roster, roll call 15 minutes before the shift, no-shows, open slots and replacements (from their area, or only from a standby area if there is one).
+- **Leads** (supporters of an area): team roster, roll call 15 minutes before the shift (and any time with `/rollcall`, also for a lead added later; coordinators lead every shift they're on), no-shows, open slots and replacements (from their area, or only from a standby area if there is one).
 - **News:** a new Engelsystem news with *Send notification* ticked goes to everyone on Telegram.
 - **Desk:** a daily check-in QR code, and one that completes onboarding.
 - **Admins:** CSV imports for the shifts and the volunteers (with their areas, lead roles and shifts), setting or resetting someone's Telegram link, and an onboarding dashboard.
