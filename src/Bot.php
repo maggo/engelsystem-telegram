@@ -389,7 +389,7 @@ class Bot
         $sent = $this->api->send(
             $chatId,
             sprintf(
-                "⏰ <b>Your shift starts at %s</b>\n\n%s\n\nSee you there! Please be %s by <b>%s</b>.",
+                "⏰ <b>Your shift starts at %s</b>\n\n%s\n\nSee you there! Please scan the QR code at the Volunteer Check-In Desk and arrive %s by <b>%s</b>.",
                 $startsAt,
                 $this->format->entry($entry, withLeads: true),
                 $place === '' ? 'there' : 'at <b>' . e($place) . '</b>',
