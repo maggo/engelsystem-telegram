@@ -15,7 +15,7 @@ use Throwable;
 
 /**
  * Time-based bot messages:
- * - Pre-shift ping: 2 hours before start, to everyone on the shift (also when checked in already)
+ * - Pre-shift ping: 3 hours before start, to everyone on the shift (also when checked in already)
  * - Roll call: 15 minutes before the shift starts, leads get everyone on the shift to confirm
  * - News: new news with "Send notification" ticked, to everyone (NewsNotification)
  *
@@ -26,7 +26,7 @@ use Throwable;
 class Scheduler
 {
     /** The shift reminder goes out this long before the shift starts */
-    public const PRESHIFT_MINUTES = 120;
+    public const PRESHIFT_MINUTES = 180;
     /** The roll call goes to the leads this long before the shift starts, when the team meets */
     public const ROLLCALL_BEFORE_MINUTES = 15;
     protected const INTERVAL_SECONDS = 30;
