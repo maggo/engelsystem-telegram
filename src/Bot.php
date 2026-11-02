@@ -225,7 +225,7 @@ class Bot
                 : '⏳ Complete your onboarding with the code shown at the end of onboarding day.';
         }
 
-        $entries = Roster::upcoming($user, 3);
+        $entries = Roster::upcoming($user);
         $lines[] = '';
         $lines[] = $entries->isEmpty() ? 'You have no shifts yet.' : '<b>Your next shifts</b>';
         foreach ($entries as $entry) {

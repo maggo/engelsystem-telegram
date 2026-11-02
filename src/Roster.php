@@ -54,9 +54,9 @@ class Roster
     }
 
     /**
-     * @return Collection<ShiftEntry> upcoming shift entries of the user
+     * @return Collection<ShiftEntry> upcoming shift entries of the user, all of them without a limit
      */
-    public static function upcoming(User $user, int $limit = 6): Collection
+    public static function upcoming(User $user, ?int $limit = null): Collection
     {
         return ShiftEntry::query()
             ->with(['shift.location', 'angelType'])
@@ -64,7 +64,7 @@ class Roster
             ->whereHas('shift', fn($q) => $q->where('end', '>', Carbon::now()))
             ->get()
             ->sortBy(fn(ShiftEntry $entry) => $entry->shift->start)
-            ->take($limit)
+            ->when($limit !== null, fn(Collection $entries) => $entries->take($limit))
             ->values();
     }
 
