@@ -125,20 +125,11 @@ class Leads
             if ($missing->take($listed)->contains(fn(ShiftEntry $entry) => in_array($entry->user_id, $checkedIn))) {
                 $lines[] = '📍 = checked in at the desk today';
             }
-            // Before the roll call is out (/rollcall early), nobody can be marked here or a no-show yet
-            if (Scheduler::rollCallStarted($shift)) {
-                foreach ($missing->take($listed) as $entry) {
-                    $buttons[] = [
-                        ['text' => '✅ ' . $this->format->shortName($entry->user) . ' is here', 'callback_data' => 'here:' . $entry->id],
-                        ['text' => '❌ No-show', 'callback_data' => 'ns:' . $entry->id],
-                    ];
-                }
-            } else {
-                $lines[] = '';
-                $lines[] = sprintf(
-                    '⏳ From %s you can mark people here or as no-show.',
-                    $shift->start->copy()->subMinutes(Scheduler::ROLLCALL_BEFORE_MINUTES)->format('H:i')
-                );
+            foreach ($missing->take($listed) as $entry) {
+                $buttons[] = [
+                    ['text' => '✅ ' . $this->format->shortName($entry->user) . ' is here', 'callback_data' => 'here:' . $entry->id],
+                    ['text' => '❌ No-show', 'callback_data' => 'ns:' . $entry->id],
+                ];
             }
         } elseif ($entries->count() > $noShows->count() && $staffing['filled'] >= $staffing['needed']) {
             // While short, the header ("all here") and the "short" line say it all
@@ -817,12 +808,10 @@ class Leads
     }
 
     /**
-     * Roll call buttons only work once the roll call is out
+     * Roll call buttons work any time, also from /rollcall before the roll call is out
      */
     protected function canRollCall(User $lead, ShiftEntry $entry): bool
     {
-        return $this->canLead($lead, $entry->angel_type_id)
-            && !$this->isOwn($lead, $entry)
-            && Scheduler::rollCallStarted($entry->shift);
+        return $this->canLead($lead, $entry->angel_type_id) && !$this->isOwn($lead, $entry);
     }
 }
