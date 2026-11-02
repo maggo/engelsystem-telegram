@@ -12,97 +12,65 @@
             </span>
         </div>
 
-        {# Open slots #}
-        <h2 class="h4">Open slots today and tomorrow</h2>
-        {% if gaps is empty %}
-            <p class="text-success mb-5">No open slots today or tomorrow.</p>
+        {# Shifts: open slots and check-ins #}
+        <h2 class="h4">Shifts today and tomorrow</h2>
+        <p>
+            <b>{{ shifts|reduce((sum, row) => sum + row.open, 0) }}</b> open slots ·
+            <b>{{ checkins.checked_in }}</b> of {{ checkins.people }} with a shift today checked in{% if checkins.without_shift %} ·
+            {{ checkins.without_shift }} checked in without a shift today{% endif %}
+            <br><span class="small text-muted">
+                Only shifts with open slots or people not checked in ·
+                <span class="text-danger">red</span>: started, <span class="text-warning">yellow</span>: starts within 3 hours ·
+                standby isn't counted as open
+            </span>
+        </p>
+        {% if shifts is empty %}
+            <p class="text-success mb-5">No open slots, and everyone on today's shifts checked in.</p>
         {% else %}
-            <p>
-                <b>{{ gaps|reduce((sum, gap) => sum + gap.needed - gap.filled, 0) }}</b> people missing
-                in {{ gaps|length }} slots · <span class="text-danger">red</span>: started,
-                <span class="text-warning">yellow</span>: starts within 3 hours · standby isn't counted
-            </p>
-            <div class="table-responsive mb-5">
-                <table class="table table-sm align-middle">
-                    <thead>
-                        <tr><th>Shift</th><th>Area</th><th class="text-end">Filled</th><th class="text-end">Missing</th></tr>
-                    </thead>
-                    <tbody>
-                        {% for gap in gaps %}
-                            <tr>
-                                <td{% if gap.urgency %} style="box-shadow: inset 4px 0 var(--bs-{{ gap.urgency }})"{% endif %}>
-                                    <a href="{{ url('/shifts', {'action': 'view', 'shift_id': gap.shift.id}) }}">
-                                        {{ gap.shift.start.format('D H:i') }}–{{ gap.shift.end.format('H:i') }}
-                                    </a>
-                                    <span class="small text-muted">{{ gap.shift.title }}</span>
-                                </td>
-                                <td>{{ gap.angel_type.name }}</td>
-                                <td class="text-end">{{ gap.filled }}/{{ gap.needed }}</td>
-                                <td class="text-end fw-bold {{ gap.urgency ? 'text-' ~ gap.urgency }}">{{ gap.needed - gap.filled }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% endif %}
-
-        {# Check-ins #}
-        {% set total = checkins.total %}
-        <h2 class="h4">Checked in today</h2>
-        {% if not checkins.areas %}
-            <p class="mb-5">No shifts today.</p>
-        {% else %}
-            <p>
-                <b>{{ total.checked_in }}</b> of {{ total.people }} with a shift today checked in ·
-                <b>{{ total.people - total.checked_in }}</b> not yet{% if total.without_shift %} ·
-                {{ total.without_shift }} checked in without a shift today{% endif %}
-            </p>
             <div class="table-responsive mb-2">
                 <table class="table table-sm align-middle">
                     <thead>
-                        <tr><th>Area</th><th class="text-end">On shift today</th><th class="text-end">Checked in</th><th class="text-end">Missing</th></tr>
+                        <tr><th>Shift</th><th>Area</th><th class="text-end">Filled</th><th class="text-end">Open</th><th class="text-end">Checked in</th></tr>
                     </thead>
                     <tbody>
-                        {% for area in checkins.areas %}
+                        {% for row in shifts %}
+                            {% set bar = row.urgency ? 'box-shadow: inset 4px 0 var(--bs-' ~ row.urgency ~ ')' %}
+                            {% set cell = row.missing is empty ? '' : 'border-bottom-0' %}
                             <tr>
-                                <td>{{ area.name }}</td>
-                                <td class="text-end">{{ area.people }}</td>
-                                <td class="text-end">{{ area.checked_in }}</td>
-                                <td class="text-end {{ area.missing|length ? 'text-danger fw-bold' : 'text-success' }}">{{ area.missing|length }}</td>
+                                <td class="{{ cell }}"{% if bar %} style="{{ bar }}"{% endif %}>
+                                    <a href="{{ url('/shifts', {'action': 'view', 'shift_id': row.shift.id}) }}">
+                                        {{ row.shift.start.format('D H:i') }}–{{ row.shift.end.format('H:i') }}
+                                    </a>
+                                    <span class="small text-muted">{{ row.shift.title }}</span>
+                                </td>
+                                <td class="{{ cell }}">{{ row.angel_type.name }}</td>
+                                <td class="text-end {{ cell }}">{{ row.filled }}{% if row.needed %}/{{ row.needed }}{% endif %}</td>
+                                <td class="text-end fw-bold {{ cell }} {{ row.open and row.urgency ? 'text-' ~ row.urgency }}">{{ row.open ?: '' }}</td>
+                                <td class="text-end {{ cell }} {{ row.missing is empty ? '' : 'text-danger fw-bold' }}">
+                                    {{ row.today ? row.checked_in ~ '/' ~ row.filled : '' }}
+                                </td>
                             </tr>
+                            {% if row.missing is not empty %}
+                                <tr>
+                                    <td colspan="5" class="small pt-0"{% if bar %} style="{{ bar }}"{% endif %}>
+                                        <span class="text-muted">Not checked in:</span>
+                                        {% for person in row.missing %}
+                                            <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">{{ person.user.displayName }}</a>
+                                            {%- if person.handle %} <span class="text-muted">@{{ person.handle }}</span>{% endif %}
+                                            {%- if person.lead %} <span class="badge bg-info">lead</span>{% endif %}
+                                            {%- if person.here %} <span class="text-success">(here per roll call)</span>{% endif %}
+                                            {{- not loop.last ? ',' }}
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            {% endif %}
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-
-            {% for area in checkins.areas|filter(area => area.missing|length) %}
-                <details class="mb-2">
-                    <summary>{{ area.name }}: {{ area.missing|length }} not checked in</summary>
-                    <table class="table table-sm align-middle mt-2">
-                        <tbody>
-                            {% for person in area.missing %}
-                                <tr>
-                                    <td>
-                                        {{ person.user.displayName }}{% if person.lead %} <span class="badge bg-info">lead</span>{% endif %}
-                                        <br><span class="small text-muted">
-                                            first shift
-                                            <a href="{{ url('/shifts', {'action': 'view', 'shift_id': person.shift.id}) }}">{{ person.shift.start.format('H:i') }}</a>
-                                            {{ person.shift.title }}
-                                        </span>
-                                    </td>
-                                    <td class="small">
-                                        {{ person.handle ? '@' ~ person.handle : person.user.name }} ·
-                                        <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">edit in Engelsystem</a>
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </details>
-            {% endfor %}
             <p class="small text-muted mb-5">
-                Check-in means they scanned today's QR code at the check-in desk. The lead's roll call
-                says who is actually at the shift.
+                Checked in means they scanned today's QR code at the check-in desk; the lead's roll call
+                says who is actually at the shift. No-shows aren't listed.
             </p>
         {% endif %}
 

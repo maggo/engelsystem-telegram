@@ -13,9 +13,9 @@ use Engelsystem\Models\UserAngelType;
 use Illuminate\Support\Collection;
 
 /**
- * Open slots today and tomorrow (like /gaps), today's check-ins and onboarding progress per area
- * (who checked in or connected Telegram, which Engelsystem can't show); shifts, goodies and the
- * log are Engelsystem's own pages
+ * Shifts until the end of tomorrow that need attention: open slots (like /gaps) or, today, people
+ * who haven't checked in at the desk; and onboarding progress per area (who connected Telegram,
+ * which Engelsystem can't show); shifts, goodies and the log are Engelsystem's own pages
  */
 class Dashboard
 {
@@ -25,75 +25,87 @@ class Dashboard
 
         return [
             'now'        => $now,
-            'gaps'       => self::gaps($now),
-            'checkins'   => self::checkins($now),
+            ...self::shifts($now),
             'onboarding' => self::onboarding(),
             'log_prefix' => Roster::LOG_PREFIX,
         ];
     }
 
     /**
-     * Open slots from now until the end of tomorrow, without standby; started shifts are urgent,
-     * as are those starting within three hours (Engelsystem's public dashboard does the same)
+     * Per shift and area, from now until the end of tomorrow: open slots (standby isn't counted,
+     * as with /gaps) and, for today's shifts, who is on it but hasn't checked in at the desk yet
+     * (no-shows aren't listed, they are already marked); only rows with either are kept. Started
+     * shifts are urgent, as are those starting within three hours, like Engelsystem's public
+     * dashboard. The totals count everyone with a shift starting today, also those that ended.
      *
-     * @return Collection<array{shift: Shift, angel_type: AngelType, needed: int, filled: int, urgency: string}>
+     * @return array{shifts: Collection, checkins: array{people: int, checked_in: int, without_shift: int}}
      */
-    protected static function gaps(Carbon $now): Collection
+    protected static function shifts(Carbon $now): array
     {
-        return Roster::gaps($now, $now->copy()->addDay()->endOfDay())
-            ->map(fn(array $gap) => [...$gap, 'urgency' => match (true) {
-                $gap['shift']->start <= $now                      => 'danger',
-                $gap['shift']->start <= $now->copy()->addHours(3) => 'warning',
-                default                                           => '',
-            }])
-            ->values();
-    }
-
-    /**
-     * Per area: who has a shift starting today and who of them checked in at the desk today, and
-     * who is still missing with their first shift; people with shifts in several areas count in each
-     *
-     * @return array{areas: array, total: array{people: int, checked_in: int, without_shift: int}}
-     */
-    protected static function checkins(Carbon $now): array
-    {
-        $entries = ShiftEntry::query()
-            ->with(['shift', 'user.personalData'])
-            ->whereHas('shift', fn($q) => $q->whereBetween('start', [
-                $now->copy()->startOfDay(),
-                $now->copy()->endOfDay(),
-            ]))
-            ->get()
-            ->sortBy(fn(ShiftEntry $entry) => $entry->shift->start);
+        $shifts = Shift::query()
+            ->with(['schedule', 'neededAngelTypes.angelType', 'shiftEntries.user.personalData', 'shiftEntries.angelType'])
+            ->where('end', '>', $now->copy()->startOfDay())
+            ->where('start', '<', $now->copy()->addDay()->endOfDay())
+            ->orderBy('start')
+            ->get();
+        $today = fn(Shift $shift) => $shift->start->isSameDay($now);
         $checkedIn = Checkin::query()->where('day', $now->toDateString())->pluck('user_id');
-        $accounts = TelegramAccount::query()->whereIn('user_id', $entries->pluck('user_id'))->get()->keyBy('user_id');
+        $onShift = $shifts->filter($today)->flatMap->shiftEntries->pluck('user_id')->unique();
+        $accounts = TelegramAccount::query()->whereIn('user_id', $onShift)->get()->keyBy('user_id');
         $leads = UserAngelType::query()->where('supporter', true)->get();
+        $here = Notification::query()
+            ->where('kind', Notification::PRESHIFT)
+            ->where('answer', Notification::HERE)
+            ->whereIn('shift_id', $shifts->pluck('id'))
+            ->get();
+        $standby = Roster::standbyArea();
 
-        $areas = [];
-        $byArea = $entries->groupBy('angel_type_id');
-        foreach (AngelType::query()->orderBy('name')->get() as $area) {
-            if (!$byArea->has($area->id)) {
-                continue;
+        $rows = new Collection();
+        foreach ($shifts->filter(fn(Shift $shift) => $shift->end > $now) as $shift) {
+            $needed = Roster::needed($shift);
+            $areas = $needed->pluck('angelType')->concat($shift->shiftEntries->pluck('angelType'))
+                ->unique('id')
+                ->sortBy('name');
+            foreach ($areas as $area) {
+                $entries = $shift->shiftEntries
+                    ->where('angel_type_id', $area->id)
+                    ->whereNull('freeloaded_by')
+                    ->sortBy(fn(ShiftEntry $entry) => $entry->user->name);
+                $count = (int) $needed->where('angel_type_id', $area->id)->sum('count');
+                $open = $area->id === $standby?->id ? 0 : max(0, $count - $entries->count());
+                $missing = $today($shift)
+                    ? $entries->reject(fn(ShiftEntry $entry) => $checkedIn->contains($entry->user_id))
+                    : new Collection();
+                if (!$open && $missing->isEmpty()) {
+                    continue;
+                }
+
+                $rows->push([
+                    'shift'      => $shift,
+                    'angel_type' => $area,
+                    'needed'     => $count,
+                    'filled'     => $entries->count(),
+                    'open'       => $open,
+                    'today'      => $today($shift),
+                    'checked_in' => $entries->count() - $missing->count(),
+                    'missing'    => $missing->map(fn(ShiftEntry $entry) => [
+                        'user'   => $entry->user,
+                        'handle' => $accounts->get($entry->user_id)?->username,
+                        'lead'   => $leads->contains(fn(UserAngelType $lead) => $lead->user_id === $entry->user_id
+                            && $lead->angel_type_id === $area->id),
+                        'here'   => $here->contains(fn(Notification $mark) => $mark->shift_id === $shift->id
+                            && $mark->user_id === $entry->user_id),
+                    ])->values(),
+                    'urgency'    => match (true) {
+                        $shift->start <= $now                      => 'danger',
+                        $shift->start <= $now->copy()->addHours(3) => 'warning',
+                        default                                    => '',
+                    },
+                ]);
             }
-            // First shift today per person, as entries are sorted by start; so is the missing list
-            $people = $byArea->get($area->id)->unique('user_id')->map(fn(ShiftEntry $entry) => [
-                'user'       => $entry->user,
-                'handle'     => $accounts->get($entry->user_id)?->username,
-                'lead'       => $leads->contains(fn(UserAngelType $lead) => $lead->user_id === $entry->user_id
-                    && $lead->angel_type_id === $area->id),
-                'shift'      => $entry->shift,
-                'checked_in' => $checkedIn->contains($entry->user_id),
-            ]);
-            $areas[] = [
-                'name'       => $area->name,
-                'people'     => $people->count(),
-                'checked_in' => $people->where('checked_in', true)->count(),
-                'missing'    => $people->reject(fn(array $person) => $person['checked_in'])->values(),
-            ];
         }
 
-        $onShift = $entries->pluck('user_id')->unique();
-        return ['areas' => $areas, 'total' => [
+        return ['shifts' => $rows, 'checkins' => [
             'people'        => $onShift->count(),
             'checked_in'    => $onShift->intersect($checkedIn)->count(),
             'without_shift' => $checkedIn->diff($onShift)->count(),
