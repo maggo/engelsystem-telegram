@@ -125,6 +125,7 @@ class Bot
             $command === '/shifts'             => $this->shifts($chatId, $user),
             $command === '/team'               => $this->leads->teamPicker($chatId, $user),
             $command === '/rollcall'           => $this->leads->rollCall($chatId, $user),
+            $command === '/roster'             => $this->leads->roster($chatId, $user),
             $command === '/gaps'               => $this->leads->gaps($chatId, $user),
             default                            => $this->welcome($chatId, $user),
         };
@@ -177,6 +178,7 @@ class Bot
 
         if (Roster::areasLedBy($user) || Roster::isCoordinator($user)) {
             $commands[] = ['command' => 'rollcall', 'description' => 'Roll call of your current or next shift'];
+            $commands[] = ['command' => 'roster', 'description' => 'Who is on which shift, by day'];
         }
         if (Roster::areasLedBy($user)) {
             $commands[] = ['command' => 'team', 'description' => 'Your team: onboarding and check-ins'];
@@ -293,6 +295,7 @@ class Bot
         $lines[] = '/shifts — your shifts with meeting points';
         if (Roster::areasLedBy($user) || Roster::isCoordinator($user)) {
             $lines[] = '/rollcall — roll call of the shift you lead now or next';
+            $lines[] = '/roster — who is on which shift, by day';
         }
         if (Roster::areasLedBy($user)) {
             $lines[] = '/team — your team: who is onboarded and here today';
@@ -513,6 +516,8 @@ class Bot
             'rc'    => $this->leads->showRollCall($chatId, $messageId, $user, $args[0], $args[1]),
             'asg'   => $this->leads->assignReplacement($chatId, $messageId, $user, $args[0], $args[1], $args[2], $args[3] ?: null),
             'team'  => $this->leads->team($chatId, $user, $args[0]),
+            'ros'   => $this->leads->showRoster($chatId, $messageId, $user, $args[0], $args[1]),
+            'rosa'  => $this->leads->showRosterPicker($chatId, $messageId, $user),
             default => null,
         };
     }

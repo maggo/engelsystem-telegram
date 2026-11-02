@@ -19,6 +19,9 @@ use Engelsystem\Models\UserAngelType;
  */
 class Leads
 {
+    /** How many days ahead /roster goes */
+    protected const ROSTER_DAYS = 7;
+
     public function __construct(protected BotApi $api, protected Format $format)
     {
     }
@@ -231,6 +234,163 @@ class Leads
         $lines[] = '✅ onboarding complete · ⏳ not yet · 📍 checked in today';
 
         $this->api->send($chatId, implode("\n", $lines));
+    }
+
+    /**
+     * /roster: who is on which shift, for an area and day; coordinators pick any area, leads theirs
+     */
+    public function roster(int|string $chatId, User $user): void
+    {
+        $areas = $this->rosterAreas($user);
+        if (!$areas) {
+            $this->api->send($chatId, 'Only leads and coordinators can see who is on shift.');
+            return;
+        }
+
+        [$text, $buttons] = count($areas) === 1
+            ? $this->rosterMessage($user, $areas[0]->id, 0)
+            : $this->rosterPicker($areas);
+        $this->api->send($chatId, $text, $buttons);
+    }
+
+    /**
+     * The picker again, in the message that showed an area's shifts
+     */
+    public function showRosterPicker(int|string $chatId, int $messageId, User $user): void
+    {
+        $areas = $this->rosterAreas($user);
+        if ($areas) {
+            [$text, $buttons] = $this->rosterPicker($areas);
+            $this->api->edit($chatId, $messageId, $text, $buttons);
+        }
+    }
+
+    /**
+     * An area's shifts on a day, in the message the button was on
+     *
+     * @param int $days from today
+     */
+    public function showRoster(int|string $chatId, int $messageId, User $user, int $angelTypeId, int $days): void
+    {
+        if ($days > self::ROSTER_DAYS || !$this->canLead($user, $angelTypeId)) {
+            return;
+        }
+
+        [$text, $buttons] = $this->rosterMessage($user, $angelTypeId, $days);
+        $this->api->edit($chatId, $messageId, $text, $buttons);
+    }
+
+    /**
+     * @return AngelType[]
+     */
+    protected function rosterAreas(User $user): array
+    {
+        return Roster::isCoordinator($user)
+            ? AngelType::query()->orderBy('name')->get()->all()
+            : collect(Roster::areasLedBy($user))->sortBy('name')->values()->all();
+    }
+
+    /**
+     * @param AngelType[] $areas
+     * @return array{string, array}
+     */
+    protected function rosterPicker(array $areas): array
+    {
+        return ['Who is on shift: which area?', array_map(
+            fn(AngelType $area) => [['text' => $area->name, 'callback_data' => 'ros:' . $area->id . ':0']],
+            $areas
+        )];
+    }
+
+    /**
+     * @return array{string, array}
+     */
+    protected function rosterMessage(User $user, int $angelTypeId, int $days): array
+    {
+        $area = AngelType::query()->find($angelTypeId);
+        $day = Carbon::today()->addDays($days);
+        $shifts = Shift::query()
+            ->with(['schedule', 'neededAngelTypes', 'shiftEntries.user.personalData', 'shiftEntries.user.state'])
+            ->whereBetween('start', [$day->copy()->startOfDay(), $day->copy()->endOfDay()])
+            ->orderBy('start')
+            ->get()
+            ->filter(fn(Shift $shift) => Roster::needed($shift)->contains('angel_type_id', $angelTypeId)
+                || $shift->shiftEntries->contains('angel_type_id', $angelTypeId))
+            ->values();
+
+        $entries = $shifts->flatMap(fn(Shift $shift) => $shift->shiftEntries->where('angel_type_id', $angelTypeId));
+        $this->format->loadHandles($entries->pluck('user_id'));
+        $leadIds = UserAngelType::query()
+            ->where('angel_type_id', $angelTypeId)
+            ->where('supporter', true)
+            ->pluck('user_id')
+            ->all();
+        // Check-ins are per day, so they only say something about today
+        $checkedIn = $days === 0 ? Checkin::usersOn($day, $entries->pluck('user_id')) : [];
+
+        $lines = [sprintf('👥 <b>%s</b> · %s', e($area?->name), $day->format('D M j'))];
+        if ($shifts->isEmpty()) {
+            $lines[] = '';
+            $lines[] = 'No shifts on this day.';
+        }
+        foreach ($shifts as $shift) {
+            $onShift = $shift->shiftEntries->where('angel_type_id', $angelTypeId);
+            $noShows = $onShift->filter(fn(ShiftEntry $entry) => (bool) $entry->freeloaded_by);
+            $staffing = Roster::staffing($shift, $angelTypeId);
+            $lines[] = '';
+            $lines[] = sprintf(
+                '<b>%s</b> %s–%s · %d/%d%s',
+                e($shift->title),
+                $shift->start->format('H:i'),
+                $shift->end->format('H:i'),
+                $staffing['filled'],
+                $staffing['needed'],
+                $staffing['filled'] < $staffing['needed']
+                    ? sprintf(' · %d open', $staffing['needed'] - $staffing['filled'])
+                    : ''
+            );
+            // Leads first, then by name
+            $people = $onShift->reject(fn(ShiftEntry $entry) => (bool) $entry->freeloaded_by)
+                ->sortBy(fn(ShiftEntry $entry) => [
+                    in_array($entry->user_id, $leadIds) ? 0 : 1,
+                    mb_strtolower($this->format->plainName($entry->user)),
+                ])
+                ->map(fn(ShiftEntry $entry) => sprintf(
+                    '%s %s%s%s',
+                    in_array($entry->user_id, $leadIds) ? '👤' : '•',
+                    $this->format->user($entry->user),
+                    // Onboarding marks them arrived in Engelsystem
+                    $entry->user->state->arrived ? '' : ' (not onboarded)',
+                    in_array($entry->user_id, $checkedIn) ? ' 📍' : ''
+                ));
+            if ($people->isEmpty()) {
+                $lines[] = 'Nobody yet.';
+            }
+            $more = '…and %d more, see the shift in Engelsystem.';
+            $this->format->addWithin($lines, $people->values()->all(), $more, 300, PHP_INT_MAX);
+            if ($noShows->isNotEmpty()) {
+                $lines[] = '❌ No-show: '
+                    . $noShows->map(fn(ShiftEntry $entry) => $this->format->user($entry->user))->implode(', ');
+            }
+        }
+        if ($shifts->isNotEmpty()) {
+            $lines[] = '';
+            $lines[] = '👤 lead' . ($days === 0 ? ' · 📍 checked in today' : '');
+        }
+
+        $toDay = fn(string $text, int $to) => [
+            'text'          => $text,
+            'callback_data' => sprintf('ros:%d:%d', $angelTypeId, $to),
+        ];
+        $buttons = [[
+            ...($days > 0 ? [$toDay('← ' . $day->copy()->subDay()->format('D'), $days - 1)] : []),
+            ...($days < self::ROSTER_DAYS ? [$toDay($day->copy()->addDay()->format('D') . ' →', $days + 1)] : []),
+        ]];
+        if (count($this->rosterAreas($user)) > 1) {
+            $buttons[] = [['text' => '☰ Other area', 'callback_data' => 'rosa:0']];
+        }
+
+        return [implode("\n", $lines), $buttons];
     }
 
     public function gaps(int|string $chatId, User $user): void
