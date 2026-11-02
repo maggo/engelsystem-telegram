@@ -334,7 +334,13 @@ class Leads
             $lines[] = '';
             $lines[] = 'No shifts on this day.';
         }
-        foreach ($shifts as $shift) {
+        foreach ($shifts as $i => $shift) {
+            // Room for the shift's header and the legend; the rest of the day is in Engelsystem
+            if ($this->format->length(implode("\n", $lines)) + 300 > Format::TEXT_BUDGET) {
+                $lines[] = '';
+                $lines[] = sprintf('…and %d more shift(s), see Engelsystem.', $shifts->count() - $i);
+                break;
+            }
             $onShift = $shift->shiftEntries->where('angel_type_id', $angelTypeId);
             $noShows = $onShift->filter(fn(ShiftEntry $entry) => (bool) $entry->freeloaded_by);
             $staffing = Roster::staffing($shift, $angelTypeId);
@@ -370,8 +376,19 @@ class Leads
             $more = '…and %d more, see the shift in Engelsystem.';
             $this->format->addWithin($lines, $people->values()->all(), $more, 300, PHP_INT_MAX);
             if ($noShows->isNotEmpty()) {
-                $lines[] = '❌ No-show: '
-                    . $noShows->map(fn(ShiftEntry $entry) => $this->format->user($entry->user))->implode(', ');
+                $names = $noShows->map(fn(ShiftEntry $entry) => $this->format->user($entry->user))->values();
+                // As many as fit, like the people above
+                $room = Format::TEXT_BUDGET - 300 - $this->format->length(implode("\n", $lines));
+                $listed = 0;
+                while (
+                    $listed < $names->count()
+                    && $this->format->length($names->take($listed + 1)->implode(', ')) <= $room
+                ) {
+                    $listed++;
+                }
+                $left = $names->count() - $listed;
+                $lines[] = '❌ No-show: ' . $names->take($listed)->implode(', ')
+                    . ($left ? sprintf('%s%d more', $listed ? ' and ' : '', $left) : '');
             }
         }
         if ($shifts->isNotEmpty()) {

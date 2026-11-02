@@ -313,12 +313,17 @@ class Bot
         $entries = Roster::upcoming($user);
         $lines[] = '';
         $lines[] = $entries->isEmpty() ? 'You have no shifts yet.' : '<b>Your next shifts</b>';
-        foreach ($entries as $entry) {
-            $lines[] = sprintf('• %s · %s', e($entry->shift->title), $this->format->shiftTime($entry->shift));
-            if ($lead = $this->format->leadLine($entry)) {
-                $lines[] = '   ' . $lead;
-            }
-        }
+        // Room for the commands below
+        $this->format->addWithin(
+            $lines,
+            $entries->map(fn(ShiftEntry $entry) => implode("\n   ", array_filter([
+                sprintf('• %s · %s', e($entry->shift->title), $this->format->shiftTime($entry->shift)),
+                $this->format->leadLine($entry),
+            ])))->all(),
+            '…and %d more, see /shifts.',
+            600,
+            PHP_INT_MAX
+        );
 
         $lines[] = '';
         $lines[] = '/shifts — your shifts with meeting points';
@@ -398,10 +403,12 @@ class Bot
         }
 
         $lines = ['<b>Your upcoming shifts</b>'];
-        foreach ($entries as $entry) {
-            $lines[] = '';
-            $lines[] = $this->format->entry($entry, withLeads: true);
-        }
+        $this->format->addWithin(
+            $lines,
+            $entries->map(fn(ShiftEntry $entry) => "\n" . $this->format->entry($entry, withLeads: true))->all(),
+            "\n…and %d more, see your shifts in Engelsystem.",
+            max: PHP_INT_MAX
+        );
 
         $this->api->send($chatId, implode("\n", $lines));
     }
