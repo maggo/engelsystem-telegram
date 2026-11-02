@@ -60,10 +60,12 @@ class Notification extends BaseModel
             return true;
         }
 
+        // Marked here early (/rollcall the evening before) still gets the reminder; a replacement
+        // was told directly (MOVED, and anyone answer() marked as told has sent_at)
         return self::query()
             ->where($key)
             ->whereNull('sent_at')
-            ->whereNull('answer')
+            ->where(fn($q) => $q->whereNull('answer')->orWhere('answer', self::HERE))
             ->where('updated_at', '<', $tickStart)
             ->update(['updated_at' => Carbon::now()]) === 1;
     }
@@ -77,13 +79,19 @@ class Notification extends BaseModel
 
     /**
      * What the roll call needs to know about the volunteer on the shift (MOVED, HERE)
+     *
+     * @param bool $told whether they were told about the shift directly, so they get no reminder
      */
-    public static function answer(ShiftEntry $entry, string $answer): void
+    public static function answer(ShiftEntry $entry, string $answer, bool $told = false): void
     {
-        self::query()->updateOrCreate(
-            ['kind' => self::PRESHIFT, 'shift_id' => $entry->shift_id, 'user_id' => $entry->user_id],
-            ['answer' => $answer]
+        $notification = self::query()->firstOrNew(
+            ['kind' => self::PRESHIFT, 'shift_id' => $entry->shift_id, 'user_id' => $entry->user_id]
         );
+        $notification->answer = $answer;
+        if ($told) {
+            $notification->sent_at ??= Carbon::now();
+        }
+        $notification->save();
     }
 
     /**

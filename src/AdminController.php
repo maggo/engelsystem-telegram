@@ -46,7 +46,9 @@ class AdminController extends BaseController
 
     public function index(): Response
     {
-        $me = $this->bot->isConfigured() ? $this->bot->api()->call('getMe') : null;
+        // A page view doesn't wait long for Telegram
+        $this->bot->api()->retryBriefly();
+        $me = $this->bot->me();
         $webhook = $me ? $this->bot->api()->call('getWebhookInfo') : null;
 
         return $this->response->withView('telegram/admin', [
@@ -284,7 +286,8 @@ class AdminController extends BaseController
      */
     public function qr(Request $request): Response
     {
-        $me = $this->bot->api()->call('getMe');
+        $this->bot->api()->retryBriefly();
+        $me = $this->bot->me();
         if (!$me) {
             // Never a guessed link: it would send people to the wrong bot
             return $this->response->withStatus(503)->withContent('Telegram is not reachable, try again.');

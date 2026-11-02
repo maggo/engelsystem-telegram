@@ -282,12 +282,4 @@ class Scheduler
     {
         return $shift->start->copy()->subMinutes(self::ROLLCALL_BEFORE_MINUTES) <= Carbon::now();
     }
-
-    /**
-     * From when the reminder goes out; roll call buttons work from then, also before the roll call
-     */
-    public static function reminderStarted(Shift $shift): bool
-    {
-        return $shift->start->copy()->subMinutes(self::PRESHIFT_MINUTES) <= Carbon::now();
-    }
 }

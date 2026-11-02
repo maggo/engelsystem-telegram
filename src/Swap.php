@@ -99,8 +99,8 @@ class Swap
         if (!$free && !self::sameHalf($leftShift, $rightShift)) {
             throw new InvalidArgumentException('Both shifts must be in the same half day.');
         }
-        $fromLeft = array_map('intval', $fromLeft);
-        $fromRight = array_map('intval', $fromRight);
+        $fromLeft = self::ids($fromLeft);
+        $fromRight = self::ids($fromRight);
         if (!$fromLeft && !$fromRight) {
             throw new InvalidArgumentException('Tick the people to move first.');
         }
@@ -153,11 +153,32 @@ class Swap
                 ];
             }
 
-            // Engelsystem has one entry per person and shift
+            // Engelsystem has one entry per person and shift, and nobody moves onto a shift at the
+            // same time as another one of theirs; what already overlapped the shift they leave
+            // stays fine (AM and PM meet at the handover)
             $picked = array_filter(array_map(fn(array $move) => $move[1]?->id, $out));
-            foreach ($out as [$user, , $to]) {
-                if ($to?->shiftEntries()->where('user_id', $user->id)->whereNotIn('id', $picked)->exists()) {
+            foreach ($out as [$user, $entry, $to]) {
+                if (!$to) {
+                    continue;
+                }
+                if ($to->shiftEntries()->where('user_id', $user->id)->whereNotIn('id', $picked)->exists()) {
                     throw new InvalidArgumentException(sprintf('%s is on %s already.', $user->displayName, $to->title));
+                }
+                $clash = ShiftEntry::query()
+                    ->with('shift')
+                    ->where('user_id', $user->id)
+                    ->whereNotIn('id', $picked)
+                    ->whereNull('freeloaded_by')
+                    ->whereHas('shift', fn($q) => self::during($q, $to))
+                    ->when($entry, fn($q) => $q->whereDoesntHave('shift', fn($q) => self::during($q, $entry->shift)))
+                    ->first();
+                if ($clash) {
+                    throw new InvalidArgumentException(sprintf(
+                        '%s is on %s at the same time as %s, nothing was moved.',
+                        $user->displayName,
+                        $clash->shift->title,
+                        $to->title
+                    ));
                 }
             }
 
@@ -191,7 +212,7 @@ class Swap
                 $soon = $move['to']->start <= Carbon::now()->addMinutes(Scheduler::PRESHIFT_MINUTES);
                 if ($move['to']->id !== $move['from']?->id && $soon) {
                     $seen = $move['answer'] === Notification::HERE;
-                    Notification::answer($entry, $seen ? Notification::HERE : Notification::MOVED);
+                    Notification::answer($entry, $seen ? Notification::HERE : Notification::MOVED, told: true);
                 }
             }
 
@@ -357,7 +378,11 @@ class Swap
         [$shiftId, $areaId] = array_map('intval', explode('-', $key . '-'));
         $shift = Shift::query()->find($shiftId);
         $area = AngelType::query()->find($areaId);
-        if (!$shift || !$area) {
+        // Only the sides the page offers, see sides(): an area the shift needs or someone is on
+        $offered = $shift && $area && Roster::needed($shift)->pluck('angel_type_id')
+            ->merge($shift->shiftEntries()->pluck('angel_type_id'))
+            ->contains(fn($id) => (int) $id === $area->id);
+        if (!$offered) {
             throw new InvalidArgumentException('That shift doesn\'t exist any more, pick it again.');
         }
 
@@ -457,9 +482,7 @@ class Swap
                 ->where('shift_id', $shift->id)
                 ->orWhere(fn($q) => $q
                     ->whereNull('freeloaded_by')
-                    ->whereHas('shift', fn($q) => $q
-                        ->where('start', '<', $shift->end)
-                        ->where('end', '>', $shift->start))))
+                    ->whereHas('shift', fn($q) => self::during($q, $shift))))
             ->select('user_id');
 
         return User::query()->whereHas('userAngelTypes')->whereNotIn('id', $busy);
@@ -489,6 +512,30 @@ class Swap
         }
 
         return $entries;
+    }
+
+    /**
+     * The ticked ids as posted; anything else than whole numbers is refused
+     *
+     * @return int[]
+     */
+    protected static function ids(array $values): array
+    {
+        foreach ($values as $value) {
+            if (!is_int($value) && (!is_string($value) || !ctype_digit($value) || strlen($value) > 10)) {
+                throw new InvalidArgumentException('Tick the people again, nothing was moved.');
+            }
+        }
+
+        return array_map('intval', $values);
+    }
+
+    /**
+     * Shifts that overlap the given one
+     */
+    protected static function during(Builder $query, Shift $shift): Builder
+    {
+        return $query->where('start', '<', $shift->end)->where('end', '>', $shift->start);
     }
 
     protected static function sameHalf(Shift $a, Shift $b): bool

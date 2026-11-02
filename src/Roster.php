@@ -215,7 +215,7 @@ class Roster
         }
 
         $now = Carbon::now();
-        $entries = ShiftEntry::query()
+        return ShiftEntry::query()
             ->with('shift')
             ->where('angel_type_id', $standby->id)
             ->where('shift_id', '!=', $shift->id)

@@ -7,6 +7,7 @@ namespace Telegram\Plugin;
 use Carbon\Carbon;
 use Engelsystem\Helpers\Authenticator;
 use Engelsystem\Models\AngelType;
+use Engelsystem\Models\EventConfig;
 use Engelsystem\Models\News;
 use Engelsystem\Models\Shifts\ShiftEntry;
 use Engelsystem\Models\User\User;
@@ -24,6 +25,8 @@ use Engelsystem\Models\User\User;
  */
 class Bot
 {
+    protected const ME_KEY = 'telegram_bot_account';
+
     public function __construct(
         protected BotApi $api,
         protected Leads $leads,
@@ -40,6 +43,32 @@ class Bot
     public function api(): BotApi
     {
         return $this->api;
+    }
+
+    /**
+     * The bot's own account (getMe), kept once Telegram answered: it only changes with the token,
+     * so the admin page and the desk's QR codes don't wait for Telegram
+     *
+     * @return array<string, mixed>|null
+     */
+    public function me(): ?array
+    {
+        if (!$this->isConfigured()) {
+            return null;
+        }
+
+        $for = self::derivedSecret('account');
+        $stored = EventConfig::query()->find(self::ME_KEY)?->value;
+        if (is_array($stored['me'] ?? null) && hash_equals($for, (string) ($stored['for'] ?? ''))) {
+            return $stored['me'];
+        }
+
+        $me = $this->api->call('getMe');
+        if (is_array($me)) {
+            EventConfig::query()->updateOrCreate(['name' => self::ME_KEY], ['value' => ['for' => $for, 'me' => $me]]);
+        }
+
+        return $me;
     }
 
     public static function webhookSecret(): string
@@ -191,8 +220,11 @@ class Bot
      * Finds the volunteer by their linked chat, or on first contact by their Telegram handle:
      * the Engelsystem username is the handle, so people added in Engelsystem are found too; the
      * handle stored by the import covers handles that don't fit into a username
+     *
+     * @param bool $connect false in groups: someone who hasn't started the bot yet is found, but
+     *     not connected, as the bot can't message them until they do
      */
-    protected function identify(array $from): ?User
+    protected function identify(array $from, bool $connect = true): ?User
     {
         $chatId = (string) $from['id'];
         $username = TelegramAccount::normalize((string) ($from['username'] ?? ''));
@@ -217,8 +249,8 @@ class Bot
         // the Engelsystem username, which nobody confirmed is this person's handle. Everyone else
         // connects in their settings, as do accounts with more rights than a volunteer.
         $user = TelegramAccount::waitingFor($username, $this->auth->getDefaultRole())?->user;
-        if (!$user) {
-            return null;
+        if (!$user || !$connect) {
+            return $user;
         }
 
         $account = TelegramAccount::query()->firstOrNew(['user_id' => $user->id]);
@@ -426,7 +458,7 @@ class Bot
             return;
         }
 
-        $user = isset($change['from']['id']) ? $this->identify($change['from']) : null;
+        $user = isset($change['from']['id']) ? $this->identify($change['from'], connect: false) : null;
         if ($chat['type'] !== 'channel' && $user && Roster::isCoordinator($user)) {
             Roster::log(sprintf('%s added the bot to the group "%s"', $user->name, $chat['title'] ?? $chat['id']));
             return;
@@ -443,7 +475,7 @@ class Bot
 
     protected function linkGroup(array $message, string $args): void
     {
-        $user = $this->identify($message['from']);
+        $user = $this->identify($message['from'], connect: false);
         if (!$user || !Roster::isCoordinator($user)) {
             return;
         }
@@ -500,7 +532,7 @@ class Bot
         }
         $args = array_pad(array_map('intval', $parts), 4, 0);
 
-        $user = $this->identify($query['from']);
+        $user = $this->identify($query['from'], connect: ($query['message']['chat']['type'] ?? '') === 'private');
         if (!$user) {
             return;
         }

@@ -125,8 +125,9 @@ class Leads
             if ($missing->take($listed)->contains(fn(ShiftEntry $entry) => in_array($entry->user_id, $checkedIn))) {
                 $lines[] = '📍 = checked in at the desk today';
             }
-            // Here any time (/rollcall early); a no-show only from the reminder on, not for a later day's shift
-            $canNoShow = Scheduler::reminderStarted($shift);
+            // Here any time (/rollcall early); a no-show only once the roll call is out, when the team
+            // meets, not while people are still on their way
+            $canNoShow = Scheduler::rollCallStarted($shift);
             foreach ($missing->take($listed) as $entry) {
                 $buttons[] = array_filter([
                     ['text' => '✅ ' . $this->format->shortName($entry->user) . ' is here', 'callback_data' => 'here:' . $entry->id],
@@ -137,7 +138,7 @@ class Leads
                 $lines[] = '';
                 $lines[] = sprintf(
                     '⏳ From %s you can also mark no-shows.',
-                    $shift->start->copy()->subMinutes(Scheduler::PRESHIFT_MINUTES)->format('H:i')
+                    $shift->start->copy()->subMinutes(Scheduler::ROLLCALL_BEFORE_MINUTES)->format('H:i')
                 );
             }
         } elseif ($entries->count() > $noShows->count() && $staffing['filled'] >= $staffing['needed']) {
@@ -469,8 +470,8 @@ class Leads
             $this->entryGone($chatId);
             return;
         }
-        // A no-show only from the reminder on, not for a later day's shift
-        if (!$this->canRollCall($lead, $entry) || !Scheduler::reminderStarted($entry->shift)) {
+        // A no-show only once the roll call is out, see rollCallMessage()
+        if (!$this->canRollCall($lead, $entry) || !Scheduler::rollCallStarted($entry->shift)) {
             return;
         }
 
@@ -650,10 +651,10 @@ class Leads
             return;
         }
         $staffing = Roster::staffing($shift, $angelTypeId);
-        // The roll call shows them as a replacement. For a later shift they get the usual reminder
-        // instead (MOVED counts as answered)
+        // The roll call shows them as a replacement, and they get no reminder as they are told below.
+        // For a later shift they get the usual reminder instead
         if ($shift->start <= Carbon::now()->addMinutes(Scheduler::PRESHIFT_MINUTES)) {
-            Notification::answer($entry, Notification::MOVED);
+            Notification::answer($entry, Notification::MOVED, told: true);
         }
 
         $target = TelegramAccount::chatOf($user);
@@ -763,8 +764,13 @@ class Leads
     protected function alertGap(Shift $shift, int $angelTypeId, string $reason, int|string|null $exceptChatId = null): void
     {
         $staffing = Roster::staffing($shift, $angelTypeId);
-        // Standby isn't refilled, it shrinks as people step in elsewhere
-        if ($staffing['filled'] >= $staffing['needed'] || $angelTypeId === Roster::standbyArea()?->id) {
+        // Standby isn't refilled, it shrinks as people step in elsewhere; a shift that is over isn't
+        // refilled either (an old roll call button)
+        if (
+            $staffing['filled'] >= $staffing['needed']
+            || $angelTypeId === Roster::standbyArea()?->id
+            || $shift->end <= Carbon::now()
+        ) {
             return;
         }
 

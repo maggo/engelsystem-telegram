@@ -96,6 +96,14 @@ class Import
             // Telegram link stay as they are
             $user = self::existing($handle);
             $existing = (bool) $user;
+            if ($user && !TelegramAccount::findByHandle($handle)) {
+                // Only the username matches: nobody confirmed it's this person, so whoever reads the
+                // result checks it (an admin's username in the sheet would get the row's areas)
+                $problem(sprintf(
+                    'matched the Engelsystem username of "%s", not a Telegram handle: check it is the same person',
+                    $user->name
+                ));
+            }
             if (!$user) {
                 try {
                     $user = self::createAccount($handle, $columns[1] ?? '', $by);
