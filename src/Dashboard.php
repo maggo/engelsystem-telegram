@@ -6,23 +6,44 @@ namespace Telegram\Plugin;
 
 use Carbon\Carbon;
 use Engelsystem\Models\AngelType;
+use Engelsystem\Models\Shifts\Shift;
 use Engelsystem\Models\User\User;
 use Engelsystem\Models\UserAngelType;
 use Illuminate\Support\Collection;
 
 /**
- * Onboarding progress per area, the one thing Engelsystem can't show (who connected Telegram);
- * shifts, gaps, goodies and the log are Engelsystem's own pages
+ * Open slots today and tomorrow (like /gaps) and onboarding progress per area (who connected
+ * Telegram, which Engelsystem can't show); shifts, goodies and the log are Engelsystem's own pages
  */
 class Dashboard
 {
     public static function data(): array
     {
+        $now = Carbon::now();
+
         return [
-            'now'        => Carbon::now(),
+            'now'        => $now,
+            'gaps'       => self::gaps($now),
             'onboarding' => self::onboarding(),
             'log_prefix' => Roster::LOG_PREFIX,
         ];
+    }
+
+    /**
+     * Open slots from now until the end of tomorrow, without standby; started shifts are urgent,
+     * as are those starting within three hours (Engelsystem's public dashboard does the same)
+     *
+     * @return Collection<array{shift: Shift, angel_type: AngelType, needed: int, filled: int, urgency: string}>
+     */
+    protected static function gaps(Carbon $now): Collection
+    {
+        return Roster::gaps($now, $now->copy()->addDay()->endOfDay())
+            ->map(fn(array $gap) => [...$gap, 'urgency' => match (true) {
+                $gap['shift']->start <= $now                      => 'danger',
+                $gap['shift']->start <= $now->copy()->addHours(3) => 'warning',
+                default                                           => '',
+            }])
+            ->values();
     }
 
     /**

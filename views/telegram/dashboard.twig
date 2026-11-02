@@ -12,6 +12,40 @@
             </span>
         </div>
 
+        {# Open slots #}
+        <h2 class="h4">Open slots today and tomorrow</h2>
+        {% if gaps is empty %}
+            <p class="text-success mb-5">No open slots today or tomorrow.</p>
+        {% else %}
+            <p>
+                <b>{{ gaps|reduce((sum, gap) => sum + gap.needed - gap.filled, 0) }}</b> people missing
+                in {{ gaps|length }} slots · <span class="text-danger">red</span>: started,
+                <span class="text-warning">yellow</span>: starts within 3 hours · standby isn't counted
+            </p>
+            <div class="table-responsive mb-5">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr><th>Shift</th><th>Area</th><th class="text-end">Filled</th><th class="text-end">Missing</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for gap in gaps %}
+                            <tr class="{{ gap.urgency ? 'table-' ~ gap.urgency }}">
+                                <td>
+                                    <a href="{{ url('/shifts', {'action': 'view', 'shift_id': gap.shift.id}) }}">
+                                        {{ gap.shift.start.format('D H:i') }}–{{ gap.shift.end.format('H:i') }}
+                                    </a>
+                                    <span class="small text-muted">{{ gap.shift.title }}</span>
+                                </td>
+                                <td>{{ gap.angel_type.name }}</td>
+                                <td class="text-end">{{ gap.filled }}/{{ gap.needed }}</td>
+                                <td class="text-end fw-bold">{{ gap.needed - gap.filled }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+
         {# Onboarding #}
         {% set total = onboarding.total %}
         <h2 class="h4">Onboarding</h2>
@@ -67,7 +101,7 @@
 
         <h2 class="h4">Everything else is in Engelsystem</h2>
         <ul class="mb-5">
-            <li><a href="{{ url('/user-shifts') }}">Shifts</a>: staffing and open slots</li>
+            <li><a href="{{ url('/user-shifts') }}">Shifts</a>: staffing, and open slots after tomorrow</li>
             <li><a href="{{ url('/admin-free') }}">Free angels</a>: who is available for a replacement</li>
             <li><a href="{{ url('/admin-active') }}">Goodie list</a>: goodie score (no-shows count against it)</li>
             <li><a href="{{ url('/admin-arrive') }}">Arrived angels</a>: onboarding by hand</li>

@@ -173,7 +173,7 @@ class AdminController extends BaseController
     }
 
     /**
-     * Onboarding progress, today's shifts, open slots and the bot's activity
+     * Open slots today and tomorrow, and onboarding progress
      */
     public function dashboard(): Response
     {
