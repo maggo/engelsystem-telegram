@@ -125,11 +125,20 @@ class Leads
             if ($missing->take($listed)->contains(fn(ShiftEntry $entry) => in_array($entry->user_id, $checkedIn))) {
                 $lines[] = '📍 = checked in at the desk today';
             }
+            // Here any time (/rollcall early); a no-show only from the reminder on, not for a later day's shift
+            $canNoShow = Scheduler::reminderStarted($shift);
             foreach ($missing->take($listed) as $entry) {
-                $buttons[] = [
+                $buttons[] = array_filter([
                     ['text' => '✅ ' . $this->format->shortName($entry->user) . ' is here', 'callback_data' => 'here:' . $entry->id],
-                    ['text' => '❌ No-show', 'callback_data' => 'ns:' . $entry->id],
-                ];
+                    $canNoShow ? ['text' => '❌ No-show', 'callback_data' => 'ns:' . $entry->id] : null,
+                ]);
+            }
+            if (!$canNoShow) {
+                $lines[] = '';
+                $lines[] = sprintf(
+                    '⏳ From %s you can also mark no-shows.',
+                    $shift->start->copy()->subMinutes(Scheduler::PRESHIFT_MINUTES)->format('H:i')
+                );
             }
         } elseif ($entries->count() > $noShows->count() && $staffing['filled'] >= $staffing['needed']) {
             // While short, the header ("all here") and the "short" line say it all
@@ -460,7 +469,8 @@ class Leads
             $this->entryGone($chatId);
             return;
         }
-        if (!$this->canRollCall($lead, $entry)) {
+        // A no-show only from the reminder on, not for a later day's shift
+        if (!$this->canRollCall($lead, $entry) || !Scheduler::reminderStarted($entry->shift)) {
             return;
         }
 
