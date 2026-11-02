@@ -77,7 +77,7 @@ msgid "config.telegram_meeting_place"
 msgstr "Meeting place"
 
 msgid "config.telegram_meeting_place.info"
-msgstr "Where volunteers meet before their shift, e.g. \"the volunteer lounge\". The shift reminder asks them to be there an hour before the shift starts. Leave empty to just give the time."
+msgstr "Where volunteers meet before their shift, e.g. \"the volunteer lounge\". The bot shows every shift starting an hour early, and the shift reminder asks them to be there by then. Leave empty to just give the time."
 
 msgid "telegram.admin.unlink.title"
 msgstr "Set or reset a Telegram link"

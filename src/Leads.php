@@ -341,7 +341,7 @@ class Leads
             $lines[] = sprintf(
                 '<b>%s</b> %s–%s · %d/%d%s',
                 e($shift->title),
-                $shift->start->format('H:i'),
+                $this->format->start($shift)->format('H:i'),
                 $shift->end->format('H:i'),
                 $staffing['filled'],
                 $staffing['needed'],

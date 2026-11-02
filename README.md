@@ -3,7 +3,7 @@
 Runs volunteer shifts over Telegram, on top of an unchanged [Engelsystem](https://github.com/engelsystem/engelsystem):
 
 - **Login:** "Log in with Telegram" on the website.
-- **Volunteers:** their shifts and meeting points in the bot, a reminder two hours before each shift (with where to meet an hour before it).
+- **Volunteers:** their shifts and meeting points in the bot, a reminder two hours before each shift (with where to meet). The bot shows every shift starting an hour before it really does, so people arrive on time; the end stays.
 - **Leads** (supporters of an area): team roster, who is on which shift (`/roster`, for coordinators every area), roll call 15 minutes before the shift (and any time with `/rollcall`, also for a lead added later; coordinators lead every shift they're on), no-shows, open slots and replacements (from their area, or only from a standby area if there is one).
 - **News:** a new Engelsystem news with *Send notification* ticked goes to everyone on Telegram.
 - **Desk:** a daily check-in QR code, and one that completes onboarding.
@@ -26,7 +26,7 @@ composer update symfony/http-foundation --with-dependencies
 
 1. Put this repository into Engelsystem as `resources/plugins/Telegram`. Engelsystem names a plugin after its folder, so keep that name.
 2. In Engelsystem: **Admin > Plugins > Telegram > Install**. This creates the plugin's tables.
-3. **Settings > Telegram:** enter the bot token and the login client ID and secret, all from @BotFather. Nothing goes into environment variables or config files. Optionally name a standby area (see below) and the meeting place, where volunteers meet an hour before their shift (e.g. *the volunteer lounge*).
+3. **Settings > Telegram:** enter the bot token and the login client ID and secret, all from @BotFather. Nothing goes into environment variables or config files. Optionally name a standby area (see below) and the meeting place, where volunteers meet at the shift start the bot shows (e.g. *the volunteer lounge*).
 4. In @BotFather, add the site URL and `<site URL>/oauth/telegram` to the bot's Login Widget allowed URLs.
 5. **Admin > Telegram & bot > Connect bot to this site.**
 

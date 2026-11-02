@@ -24,9 +24,6 @@ use Engelsystem\Models\User\User;
  */
 class Bot
 {
-    /** The reminder asks volunteers to be at the meeting place this long before the shift starts */
-    protected const MEET_BEFORE_MINUTES = 60;
-
     public function __construct(
         protected BotApi $api,
         protected Leads $leads,
@@ -387,16 +384,16 @@ class Bot
             return true;
         }
 
-        $meetAt = $entry->shift->start->copy()->subMinutes(self::MEET_BEFORE_MINUTES)->format('H:i');
+        $startsAt = $this->format->start($entry->shift)->format('H:i');
         $place = trim((string) config('telegram_meeting_place', ''));
         $sent = $this->api->send(
             $chatId,
             sprintf(
                 "⏰ <b>Your shift starts at %s</b>\n\n%s\n\nSee you there! Please be %s by <b>%s</b>.",
-                $entry->shift->start->format('H:i'),
+                $startsAt,
                 $this->format->entry($entry, withLeads: true),
                 $place === '' ? 'there' : 'at <b>' . e($place) . '</b>',
-                $meetAt
+                $startsAt
             )
         );
 
