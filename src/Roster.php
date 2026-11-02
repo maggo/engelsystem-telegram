@@ -27,11 +27,6 @@ class Roster
     /** While the scheduler runs after someone's page view, see asSystem() */
     protected static bool $system = false;
 
-    /** Prefix of the volunteer's message to the lead in their comment on their shift entry */
-    protected const REASON_PREFIX = "Late or can't come: ";
-    /** What 1.0 wrote, still read for cancellations made before the update */
-    protected const OLD_REASON_PREFIX = "Can't make it: ";
-    protected const REASON_LENGTH = 200;
     public const ALREADY_ON_SHIFT = 'already on this shift';
     /** A standby shift that starts within this time can give replacements already */
     protected const STANDBY_SOON_MINUTES = 60;
@@ -207,7 +202,7 @@ class Roster
     /**
      * Standby entries whose people can replace someone on the shift: on a standby shift that
      * covers most of it (so the morning standby isn't offered for the afternoon shift) and runs
-     * now or starts within the hour, not marked as no-show, and not cancelled; who isn't checked in
+     * now or starts within the hour, and not marked as no-show; who isn't checked in
      * yet comes last (see replacements())
      *
      * @return Collection<ShiftEntry>
@@ -231,19 +226,7 @@ class Roster
                 ->where('start', '<=', $now->copy()->addMinutes(self::STANDBY_SOON_MINUTES))
                 ->where('end', '>', $now))
             ->get()
-            ->filter(fn(ShiftEntry $entry) => self::coversMost($entry->shift, $shift));
-
-        // Wrote they're late or can't come (or are about to): not someone to send anywhere
-        $cancelled = Notification::query()
-            ->where('kind', Notification::PRESHIFT)
-            ->whereIn('shift_id', $entries->pluck('shift_id'))
-            ->whereIn('answer', [Notification::ASKED, Notification::CANT])
-            ->get(['shift_id', 'user_id'])
-            ->map(fn(Notification $n) => $n->shift_id . ':' . $n->user_id)
-            ->all();
-
-        return $entries
-            ->reject(fn(ShiftEntry $entry) => in_array($entry->shift_id . ':' . $entry->user_id, $cancelled))
+            ->filter(fn(ShiftEntry $entry) => self::coversMost($entry->shift, $shift))
             ->values();
     }
 
@@ -467,34 +450,6 @@ class Roster
         self::log($user->name . ' completed onboarding (arrived)');
 
         return true;
-    }
-
-    /**
-     * Stores the volunteer's message to the lead (late or can't come) in their comment on the
-     * shift entry, so it is in Engelsystem even without the bot
-     *
-     * @return string the reason as stored
-     */
-    public static function setCancelReason(ShiftEntry $entry, string $reason): string
-    {
-        $reason = mb_substr(trim($reason), 0, self::REASON_LENGTH);
-        $entry->user_comment = trim(self::REASON_PREFIX . $reason . "\n" . (string) $entry->user_comment);
-        $entry->save();
-
-        return $reason;
-    }
-
-    public static function cancelReason(ShiftEntry $entry): string
-    {
-        foreach (preg_split('/\R/', (string) $entry->user_comment) as $line) {
-            foreach ([self::REASON_PREFIX, self::OLD_REASON_PREFIX] as $prefix) {
-                if (str_starts_with($line, $prefix)) {
-                    return substr($line, strlen($prefix));
-                }
-            }
-        }
-
-        return '';
     }
 
     /**

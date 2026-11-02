@@ -15,8 +15,7 @@ use Engelsystem\Models\User\User;
  * Handles Telegram updates: commands, buttons and group membership
  *
  * Volunteers: connect (Engelsystem username = Telegram handle), complete onboarding and check in
- * (QR codes), see their shifts, write to their lead when they're late or can't come.
- * What leads and coordinators do is in Leads.
+ * (QR codes), see their shifts. What leads and coordinators do is in Leads.
  *
  * Everything that counts is recorded the Engelsystem way (arrival, shift entries, no-shows), so
  * the same can be done in Engelsystem when the bot is down.
@@ -25,8 +24,6 @@ use Engelsystem\Models\User\User;
  */
 class Bot
 {
-    /** How long a plain message counts as the reason, without replying to the question */
-    protected const REASON_MINUTES = 30;
     /** The reminder asks volunteers to be at the meeting place this long before the shift starts */
     protected const MEET_BEFORE_MINUTES = 60;
 
@@ -128,9 +125,7 @@ class Bot
             $command === '/shifts'             => $this->shifts($chatId, $user),
             $command === '/team'               => $this->leads->teamPicker($chatId, $user),
             $command === '/gaps'               => $this->leads->gaps($chatId, $user),
-            str_starts_with($text, '/')        => $this->welcome($chatId, $user),
-            default                            => $this->receiveReason($chatId, $user, $text, $message['reply_to_message']['message_id'] ?? null)
-                || $this->welcome($chatId, $user),
+            default                            => $this->welcome($chatId, $user),
         };
 
         // After the answer, so it isn't kept waiting; picks up areas led or given up since
@@ -392,11 +387,7 @@ class Bot
                 $this->format->entry($entry, withLeads: true),
                 $place === '' ? 'there' : 'at <b>' . e($place) . '</b>',
                 $meetAt
-            ),
-            // Leads have no lead to notify, they talk to coordination directly
-            Roster::isSupporter($entry->user_id, $entry->angel_type_id)
-                ? []
-                : [[['text' => '✋ Notify your lead', 'callback_data' => 'cant:' . $entry->shift_id]]]
+            )
         );
 
         // Arrived, or failed for good (no point in sending it again)
@@ -507,16 +498,7 @@ class Bot
             return;
         }
 
-        // The volunteer's own answers belong to their private pre-shift ping, never a group message
-        $private = ($query['message']['chat']['type'] ?? '') === 'private';
-
         match ($action) {
-            // "late" is the separate button on reminders sent before 1.1.0
-            'late',
-            'cant'  => $private ? $this->askReason($chatId, $user, $args[0]) : null,
-            'exc'   => $this->leads->decide($chatId, $messageId, $user, $args[0], excused: true),
-            'unx'   => $this->leads->decide($chatId, $messageId, $user, $args[0], excused: false),
-            'rexc'  => $this->leads->decide($chatId, $messageId, $user, $args[0], excused: true, rollCall: true),
             'here'  => $this->leads->markHere($chatId, $messageId, $user, $args[0]),
             'ns'    => $this->leads->markNoShow($chatId, $messageId, $user, $args[0]),
             // A message with just this button stands for one gap (unlike /gaps), so the button goes once it's filled
@@ -526,20 +508,6 @@ class Bot
             'team'  => $this->leads->team($chatId, $user, $args[0]),
             default => null,
         };
-    }
-
-    /**
-     * The volunteer's entry on a shift that hasn't ended, and isn't marked as no-show yet
-     */
-    protected function openEntry(User $user, int $shiftId): ?ShiftEntry
-    {
-        return ShiftEntry::query()
-            ->with('shift')
-            ->where('shift_id', $shiftId)
-            ->where('user_id', $user->id)
-            ->whereNull('freeloaded_by')
-            ->whereHas('shift', fn($q) => $q->where('end', '>', Carbon::now()))
-            ->first();
     }
 
     /**
@@ -560,96 +528,4 @@ class Bot
         return $sent !== null || !$this->api->failedTemporarily();
     }
 
-    /**
-     * "Late or can't come": the volunteer's message to their lead, required; their reply to the
-     * question is the confirmation
-     */
-    protected function askReason(int|string $chatId, User $user, int $shiftId): void
-    {
-        if (!$entry = $this->openEntry($user, $shiftId)) {
-            $this->api->send($chatId, 'You are not on this shift (anymore).');
-            return;
-        }
-        // One message per shift; a second one would also take back the lead's pending decision
-        $answer = Notification::query()
-            ->where(['kind' => Notification::PRESHIFT, 'shift_id' => $shiftId, 'user_id' => $user->id])
-            ->value('answer');
-        if ($answer === Notification::CANT) {
-            $this->api->send($chatId, 'Your lead already has your message about this shift and will decide.');
-            return;
-        }
-
-        $prompt = $this->api->call('sendMessage', [
-            'chat_id'      => $chatId,
-            'text'         => sprintf(
-                "✋ <b>%s · %s</b>\n\n"
-                . "Reply with a message for your lead: how late you'll be, or what emergency keeps you "
-                . "from coming.\n\n"
-                . "Your lead decides whether you're excused: excused takes you off the shift, "
-                . 'not excused counts as a no-show. Without a message, nothing changes.',
-                e($entry->shift->title),
-                $this->format->shiftTime($entry->shift)
-            ),
-            'parse_mode'   => 'HTML',
-            'reply_markup' => ['force_reply' => true, 'input_field_placeholder' => 'e.g. 20 min late, train delayed'],
-        ]);
-        if (isset($prompt['message_id'])) {
-            Notification::answer($entry, Notification::ASKED, (int) $prompt['message_id']);
-        }
-    }
-
-    /**
-     * The message for the lead: a reply to the question, or a plain message right after
-     * it if only one question is open. Anything else gets the welcome.
-     */
-    protected function receiveReason(int|string $chatId, User $user, string $text, ?int $replyTo): bool
-    {
-        $open = Notification::query()
-            ->where('kind', Notification::PRESHIFT)
-            ->where('user_id', $user->id)
-            ->where('answer', Notification::ASKED)
-            ->orderByDesc('updated_at')
-            ->get()
-            ->filter(fn(Notification $asked) => $this->openEntry($user, $asked->shift_id) !== null);
-
-        $asked = $replyTo
-            ? $open->firstWhere('prompt_message_id', $replyTo)
-            : ($open->count() === 1 && $open->first()->updated_at > Carbon::now()->subMinutes(self::REASON_MINUTES)
-                ? $open->first()
-                : null);
-        if (!$asked && $open->isNotEmpty()) {
-            $this->api->send($chatId, $open->count() > 1
-                ? 'You have questions open for more than one shift. Please reply to the one for the shift you mean (swipe it to the left).'
-                : 'Please reply to the question for your shift (swipe it to the left), so your message reaches your lead.');
-            return true;
-        }
-        if (!$asked) {
-            return false;
-        }
-
-        $entry = $this->openEntry($user, $asked->shift_id);
-
-        $reason = Roster::setCancelReason($entry, $text);
-        Notification::answer($entry, Notification::CANT);
-        // The message is on the shift entry, not in the log: it may be about someone's health
-        Roster::log(sprintf('%s wrote to their lead about %s %s (late or can\'t come)', $user->name, $entry->shift->title, $this->format->shiftLabel($entry->shift)));
-
-        $leads = $this->leads->sendToLeads($entry->shift, $entry->angel_type_id, sprintf(
-            "✋ <b>%s</b> about %s · %s:\n\n\"%s\"\n\nOnly late? Nothing to do, mark them here in the roll call.",
-            $this->format->user($user),
-            e($entry->shift->title),
-            $this->format->shiftTime($entry->shift),
-            e($reason)
-        ), [[
-            ['text' => '✅ Excuse: remove from shift', 'callback_data' => 'exc:' . $entry->id],
-            ['text' => '❌ Not excused: no-show', 'callback_data' => 'unx:' . $entry->id],
-        ]], except: $user);
-
-        $this->api->send($chatId, sprintf(
-            "Thanks, %s. You stay on the shift unless you're excused.",
-            $leads ? 'your lead has your message' : 'the coordinators have your message'
-        ));
-
-        return true;
-    }
 }

@@ -3,8 +3,8 @@
 Runs volunteer shifts over Telegram, on top of an unchanged [Engelsystem](https://github.com/engelsystem/engelsystem):
 
 - **Login:** "Log in with Telegram" on the website.
-- **Volunteers:** their shifts and meeting points in the bot, a reminder two hours before each shift (with where to meet an hour before it), and, if they're late or can't come, a required message to their lead.
-- **Leads** (supporters of an area): team roster, roll call 15 minutes before the shift, excuse or no-show, open slots and replacements (from their area, or only from a standby area if there is one).
+- **Volunteers:** their shifts and meeting points in the bot, a reminder two hours before each shift (with where to meet an hour before it).
+- **Leads** (supporters of an area): team roster, roll call 15 minutes before the shift, no-shows, open slots and replacements (from their area, or only from a standby area if there is one).
 - **News:** a new Engelsystem news with *Send notification* ticked goes to everyone on Telegram.
 - **Desk:** a daily check-in QR code, and one that completes onboarding.
 - **Admins:** CSV imports for the shifts and the volunteers (with their areas, lead roles and shifts), setting or resetting someone's Telegram link, and an onboarding dashboard.
@@ -34,7 +34,7 @@ composer update symfony/http-foundation --with-dependencies
 
 A standby area is an ordinary area (angel type) with its own shifts, for volunteers who wait to step in anywhere. Name it under **Settings > Telegram > Standby area**. Standby shifts must be shifts of their own, not an extra area on another area's shift. Then:
 
-- Replacement lists for every other area offer only the people on a standby shift that covers most of the shift and runs now or starts within the hour, checked-in people first (everyone else is assumed to be on a shift of their own). People who wrote they're late or can't come are left out. Picking one moves them: their standby entry is removed, and coordination is told how many are left.
+- Replacement lists for every other area offer only the people on a standby shift that covers most of the shift and runs now or starts within the hour, checked-in people first (everyone else is assumed to be on a shift of their own). Picking one moves them: their standby entry is removed, and coordination is told how many are left.
 - The standby shift itself has no gap alerts and doesn't show in open slots, it is meant to shrink.
 - Everything else works like any area: reminders, roll call (to coordination if the shift has no lead), no-shows.
 - If the name matches no area, nobody is offered and leads are told the setting is wrong.
