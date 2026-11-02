@@ -29,8 +29,8 @@
                     </thead>
                     <tbody>
                         {% for gap in gaps %}
-                            <tr class="{{ gap.urgency ? 'table-' ~ gap.urgency }}">
-                                <td>
+                            <tr>
+                                <td{% if gap.urgency %} style="box-shadow: inset 4px 0 var(--bs-{{ gap.urgency }})"{% endif %}>
                                     <a href="{{ url('/shifts', {'action': 'view', 'shift_id': gap.shift.id}) }}">
                                         {{ gap.shift.start.format('D H:i') }}–{{ gap.shift.end.format('H:i') }}
                                     </a>
@@ -38,7 +38,7 @@
                                 </td>
                                 <td>{{ gap.angel_type.name }}</td>
                                 <td class="text-end">{{ gap.filled }}/{{ gap.needed }}</td>
-                                <td class="text-end fw-bold">{{ gap.needed - gap.filled }}</td>
+                                <td class="text-end fw-bold {{ gap.urgency ? 'text-' ~ gap.urgency }}">{{ gap.needed - gap.filled }}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
