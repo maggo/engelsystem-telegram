@@ -9,7 +9,6 @@ use Engelsystem\Models\AngelType;
 use Engelsystem\Models\Shifts\Shift;
 use Engelsystem\Models\Shifts\ShiftEntry;
 use Engelsystem\Models\User\User;
-use Engelsystem\Models\UserAngelType;
 
 /**
  * What leads (supporters of an area) and coordinators do in the bot: team roster, roll call,
@@ -67,12 +66,11 @@ class Leads
     protected function rollCallMessage(Shift $shift, int $angelTypeId): array
     {
         $area = AngelType::query()->find($angelTypeId);
-        // The leads take the roll call, they aren't on it
-        $leadIds = Roster::leadsOf($shift, $angelTypeId)->pluck('id')->all();
+        // The leads take the roll call, they aren't on it or in its numbers
         $entries = $shift->shiftEntries()
             ->with('user.personalData')
             ->where('angel_type_id', $angelTypeId)
-            ->whereNotIn('user_id', $leadIds)
+            ->whereNotIn('user_id', Roster::leadIds())
             ->get();
         $this->format->loadHandles($entries->pluck('user_id'));
         $checkedIn = Checkin::usersOn($shift->start, $entries->pluck('user_id'));
@@ -94,18 +92,11 @@ class Leads
             e($shift->title),
             $this->format->shiftTime($shift)
         )];
-        // Volunteers only, the leads take the roll call; the lead's slot is left out of "needed" too,
-        // so it adds up with the "short" line below
-        $leadSlots = $shift->shiftEntries()
-            ->where('angel_type_id', $angelTypeId)
-            ->whereIn('user_id', $leadIds)
-            ->whereNull('freeloaded_by')
-            ->count();
         $staying = $entries->count() - $noShows->count();
         $lines[] = sprintf(
             '%d/%d volunteers on the shift · %s',
             $staying,
-            max(0, $staffing['needed'] - $leadSlots),
+            $staffing['needed'],
             match (true) {
                 $staying === $missing->count() => 'nobody here yet',
                 $missing->isEmpty()            => 'all here',
@@ -203,32 +194,31 @@ class Leads
             ->orderBy('name')
             ->get();
         $this->format->loadHandles($members->pluck('id'));
-        $supporters = UserAngelType::query()
-            ->where('angel_type_id', $angelTypeId)
-            ->where('supporter', true)
-            ->pluck('user_id')
-            ->all();
+        $leadIds = Roster::leadIds()->all();
         $today = Checkin::usersOn(Carbon::now(), $members->pluck('id'));
 
-        $notOnboarded = $members->filter(fn(User $member) => !$member->state->arrived);
+        // The numbers are volunteers only, the leads are listed without counting
+        $volunteers = $members->reject(fn(User $member) => in_array($member->id, $leadIds));
+        $notOnboarded = $volunteers->filter(fn(User $member) => !$member->state->arrived);
         $lines = [sprintf(
-            '👥 <b>%s</b> — %d members, %d onboarded, %d checked in today',
+            '👥 <b>%s</b> — %d volunteers, %d onboarded, %d checked in today',
             e($area->name),
-            $members->count(),
-            $members->count() - $notOnboarded->count(),
-            count($today)
+            $volunteers->count(),
+            $volunteers->count() - $notOnboarded->count(),
+            count(array_diff($today, $leadIds))
         )];
         $lines[] = '';
         if ($notOnboarded->isEmpty()) {
-            $lines[] = '🎉 Everyone has completed onboarding.';
+            $lines[] = '🎉 Every volunteer has completed onboarding.';
         }
         // Everyone, onboarded first; no buttons here, so only the text length limits it
-        $listed = $members->filter(fn(User $member) => $member->state->arrived)->concat($notOnboarded);
+        $listed = $members->filter(fn(User $member) => $member->state->arrived)
+            ->concat($members->reject(fn(User $member) => $member->state->arrived));
         $this->format->addWithin($lines, $listed->map(fn(User $member) => sprintf(
             '%s %s%s%s',
             $member->state->arrived ? '✅' : '⏳',
             $this->format->user($member),
-            in_array($member->id, $supporters) ? ' (lead)' : '',
+            in_array($member->id, $leadIds) ? ' (lead)' : '',
             in_array($member->id, $today) ? ' · 📍 here' : ''
         ))->values()->all(), '…and %d more, see the dashboard in Engelsystem.', 300, PHP_INT_MAX);
         $lines[] = '';
@@ -321,11 +311,7 @@ class Leads
 
         $entries = $shifts->flatMap(fn(Shift $shift) => $shift->shiftEntries->where('angel_type_id', $angelTypeId));
         $this->format->loadHandles($entries->pluck('user_id'));
-        $leadIds = UserAngelType::query()
-            ->where('angel_type_id', $angelTypeId)
-            ->where('supporter', true)
-            ->pluck('user_id')
-            ->all();
+        $leadIds = Roster::leadIds()->all();
         // Check-ins are per day, so they only say something about today
         $checkedIn = $days === 0 ? Checkin::usersOn($day, $entries->pluck('user_id')) : [];
 

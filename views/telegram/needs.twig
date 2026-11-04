@@ -1,0 +1,96 @@
+{% extends 'layouts/app.twig' %}
+
+{% block title %}{{ __('telegram.needs.title') }}{% endblock %}
+
+{% block content %}
+    <div class="container-fluid">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-3 gap-2">
+            <h1 class="mb-0">{{ block('title') }}</h1>
+            <span class="text-muted small">
+                <a href="{{ url('/admin/telegram/dashboard') }}">{{ __('telegram.dashboard.title') }}</a>
+            </span>
+        </div>
+        {% include 'layouts/parts/messages.twig' %}
+
+        <p class="text-muted">
+            How many volunteers each shift needs, for every day at once. Change any numbers, then save once.
+            Leads aren't counted: Engelsystem's need also keeps a slot for each lead on the shift, saving adds them.
+            Below each number: volunteers on the shift, and leads.
+            Shifts that are over can't be changed.
+        </p>
+
+        {% if areas is empty %}
+            <p class="text-muted mb-5">There are no shifts with a need yet.</p>
+        {% else %}
+            <form method="post" action="{{ url('/admin/telegram/needs/save') }}" id="needs-form">
+                {{ csrf() }}
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-bordered align-middle text-center mb-0" id="needs-table">
+                        <thead>
+                            <tr>
+                                <th class="text-start" style="position: sticky; left: 0; z-index: 2; background: var(--bs-body-bg)">Area</th>
+                                <th class="text-start">Shift</th>
+                                {% for day, label in days %}<th>{{ label }}</th>{% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for area, rows in areas %}
+                                {% for row in rows %}
+                                    <tr>
+                                        {% if loop.first %}
+                                            <th rowspan="{{ rows|length }}" class="text-start"
+                                                style="position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg)">{{ area }}</th>
+                                        {% endif %}
+                                        <td class="text-start text-nowrap small">{{ row.time }}</td>
+                                        {% for day, label in days %}
+                                            <td class="text-nowrap" data-day="{{ day }}" style="min-width: 6rem">
+                                                {% for cell in row.days[day] ?? [] %}
+                                                    {% set title = (cell.shift.title ?: area) ~ ', ' ~ label ~ ' ' ~ row.time %}
+                                                    <div{% if not loop.last %} class="mb-2"{% endif %}>
+                                                        {% if cell.editable %}
+                                                            <input type="number" class="form-control form-control-sm mx-auto text-center"
+                                                                   style="width: 5rem" min="0" max="999" step="1" required
+                                                                   name="need[{{ cell.shift.id }}][{{ cell.area_id }}]"
+                                                                   value="{{ cell.volunteers }}" data-was="{{ cell.volunteers }}"
+                                                                   aria-label="Volunteers needed: {{ title }}" title="{{ title }}">
+                                                            <input type="hidden" name="was[{{ cell.shift.id }}][{{ cell.area_id }}]" value="{{ cell.volunteers }}">
+                                                        {% else %}
+                                                            <span class="fs-6" data-value="{{ cell.volunteers }}"
+                                                                  title="{{ title }}: {{ cell.shift.schedule ? 'from a schedule' : 'over' }}">{{ cell.volunteers }}</span>
+                                                        {% endif %}
+                                                        <a href="{{ url('/shifts', {'action': 'view', 'shift_id': cell.shift.id}) }}"
+                                                           class="d-block small text-muted text-decoration-none" title="Open the shift">
+                                                            {%- set short = cell.filled < cell.volunteers -%}
+                                                            <span class="{{ short ? 'text-danger' : '' }}">{{ cell.filled }} on</span>
+                                                            {%- if cell.leads %} · {{ cell.leads == 1 ? '1 lead' : cell.leads ~ ' leads' }}{% endif -%}
+                                                        </a>
+                                                    </div>
+                                                {% endfor %}
+                                            </td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="fw-bold">
+                                <th class="text-start" style="position: sticky; left: 0; z-index: 1; background: var(--bs-body-bg)">Total</th>
+                                <td></td>
+                                {% for day, label in days %}<td data-total="{{ day }}"></td>{% endfor %}
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-3 py-2 mb-5"
+                     style="position: sticky; bottom: 0; z-index: 3; background: var(--bs-body-bg)">
+                    <button type="submit" class="btn btn-primary" id="needs-button">Save</button>
+                    <span class="small text-muted">
+                        Only numbers changed here are saved, so changes someone else made meanwhile stay.
+                        Every change shows in the <a href="{{ url('/admin/logs', {'search': 'changed the need'}) }}">log</a>.
+                    </span>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+    <script src="{{ url('/admin/telegram/needs.js') }}"></script>
+{% endblock %}

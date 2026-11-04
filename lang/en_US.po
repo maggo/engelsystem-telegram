@@ -46,6 +46,12 @@ msgstr "Volunteer dashboard"
 msgid "telegram.swap.title"
 msgstr "Swap people"
 
+msgid "telegram.needs.title"
+msgstr "Needed volunteers"
+
+msgid "telegram.checkins.title"
+msgstr "Check-ins"
+
 msgid "telegram.admin.onboarding.title"
 msgstr "Onboarding codes"
 

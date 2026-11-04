@@ -4,6 +4,28 @@ Each release is tagged `vX.Y.Z`, matching `version` in `composer.json`. Releases
 migrations or new settings say so, as they need **Admin > Plugins > Telegram > Update** or an
 admin entering something.
 
+## Unreleased
+
+- **Check-ins:** Admin > *Check-ins* (coordinators only) shows a day's check-ins per shift, who on
+  a shift hasn't checked in and the no-shows; an admin can check someone in for any day with
+  shifts or take a check-in back (for a dead phone, say), and check in every lead for every day
+  at once. Check-ins by hand have no time until the person scans the code. Each change is logged.
+- **Dashboard:** a day's check-ins per area and half day, and who on a shift that day hasn't
+  checked in; the day can be picked.
+- **Leads aren't counted as volunteers:** every number of volunteers (dashboard, `/team`,
+  `/roster`, `/gaps`, gap alerts, roll call, replacements, *Swap people*) leaves out the leads,
+  supporters of any area, and their slots in Engelsystem's need. Leads are still listed, marked
+  as such.
+- **Needed volunteers:** Admin > *Needed volunteers* (coordinators only) shows every shift's need
+  in one table, one row per area and shift time, one column per day, and saves all changed
+  numbers at once, all or nothing. The numbers are volunteers: Engelsystem's need also holds a
+  slot for each lead on the shift, which saving adds. Only cells changed on the page are written;
+  shifts that are over and shifts from a schedule can't be changed there. Each change is logged.
+- **API for dashboards:** read-only JSON under `/telegram/api` (shifts, entries, check-ins,
+  people, log), with the check-ins, onboarding, Telegram links, roll call marks and no-shows
+  that Engelsystem's API doesn't show. Same API key as Engelsystem's API, sent as a header; needs
+  `api` and `admin_user` (the log also `admin_log`). See the README.
+
 ## 1.2.0 (2026-11-02)
 
 - **Tested against:** Engelsystem `main` at `f09f95ec`.

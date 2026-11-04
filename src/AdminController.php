@@ -175,11 +175,11 @@ class AdminController extends BaseController
     }
 
     /**
-     * Open slots today and tomorrow, and onboarding progress
+     * Open slots today and tomorrow, a day's check-ins and onboarding progress
      */
-    public function dashboard(): Response
+    public function dashboard(Request $request): Response
     {
-        return $this->response->withView('telegram/dashboard', Dashboard::data());
+        return $this->response->withView('telegram/dashboard', Dashboard::data($request->get('day')));
     }
 
     /**
@@ -188,6 +188,96 @@ class AdminController extends BaseController
     public function dashboardScript(): Response
     {
         return $this->script('dashboard.js');
+    }
+
+    /**
+     * Check-ins per shift of a day, and by hand, see CheckinList
+     */
+    public function checkins(Request $request): Response
+    {
+        $user = $request->get('user');
+
+        return $this->response->withView('telegram/checkins', [
+            ...CheckinList::data(
+                $request->get('day'),
+                $request->get('search'),
+                is_numeric($user) ? (int) $user : null
+            ),
+            'open' => (string) $request->get('open'),
+        ]);
+    }
+
+    /**
+     * Picking another day reloads the page; a file of its own, as the site's CSP blocks inline scripts
+     */
+    public function checkinsScript(): Response
+    {
+        return $this->script('checkins.js');
+    }
+
+    /**
+     * Checks someone in for a day with shifts, or takes their check-in back
+     */
+    public function checkinsSet(Request $request): Response
+    {
+        $user = User::query()->find((int) $request->postData('user'));
+        $day = (string) $request->postData('day');
+        // Back to where it was clicked: the shift or list (kept open), or the search
+        $open = (string) $request->postData('open');
+        $back = $this->url->to('/admin/telegram/checkins', array_filter([
+            'day'    => $open !== '' ? $day : $request->postData('view_day'),
+            'open'   => $open,
+            'search' => $open !== '' ? null : $request->postData('search'),
+            'user'   => $open !== '' || $request->postData('search') ? null : $request->postData('user'),
+        ])) . ($open !== '' ? '#open-' . $open : '#find');
+        if (!$user || !Checkin::days()->has($day)) {
+            $this->addNotification('Unknown person or a day without shifts.', NotificationType::ERROR);
+            return $this->redirect->to($back);
+        }
+
+        $date = Carbon::parse($day);
+        $label = $date->format('D M j');
+        $by = $this->auth->user()->name;
+        if ($request->postData('checked_in')) {
+            if (Checkin::record($user->id, $date, byHand: true)) {
+                Roster::log(sprintf('%s checked in %s for %s', $by, $user->name, $label));
+            }
+            $this->addNotification(sprintf('%s is checked in for %s.', $user->displayName, $label));
+        } else {
+            if (Checkin::remove($user->id, $date)) {
+                Roster::log(sprintf('%s took back the check-in of %s for %s', $by, $user->name, $label));
+            }
+            $this->addNotification(sprintf('%s is no longer checked in for %s.', $user->displayName, $label));
+        }
+
+        return $this->redirect->to($back);
+    }
+
+    /**
+     * Checks in every lead (supporter of any area) for every day with shifts
+     */
+    public function checkinsLeads(): Response
+    {
+        $leads = Roster::leadIds();
+        $days = Checkin::days();
+        $new = Checkin::recordAll($leads, $days->keys());
+        if ($new) {
+            Roster::log(sprintf(
+                '%s checked in all %d leads for every day with shifts (%d new check-ins)',
+                $this->auth->user()->name,
+                $leads->count(),
+                $new
+            ));
+        }
+
+        $this->addNotification(sprintf(
+            'All %d leads are checked in for %d days, %d check-ins were new.',
+            $leads->count(),
+            $days->count(),
+            $new
+        ));
+
+        return $this->redirect->to('/admin/telegram/checkins');
     }
 
     /**
@@ -244,6 +334,37 @@ class AdminController extends BaseController
             'left'  => $left,
             'right' => $right,
         ]));
+    }
+
+    /**
+     * Every shift's need in one table, see Needs
+     */
+    public function needs(): Response
+    {
+        return $this->response->withView('telegram/needs', Needs::data());
+    }
+
+    public function needsScript(): Response
+    {
+        return $this->script('needs.js');
+    }
+
+    public function needsSave(Request $request): Response
+    {
+        try {
+            $changed = Needs::save(
+                $request->request->all('need'),
+                $request->request->all('was'),
+                $this->auth->user()
+            );
+            $this->addNotification($changed
+                ? sprintf('%d need(s) changed: %s.', count($changed), implode('; ', $changed))
+                : 'Nothing changed.');
+        } catch (InvalidArgumentException $e) {
+            $this->addNotification($e->getMessage(), NotificationType::ERROR);
+        }
+
+        return $this->redirect->to('/admin/telegram/needs');
     }
 
     protected function script(string $file): Response

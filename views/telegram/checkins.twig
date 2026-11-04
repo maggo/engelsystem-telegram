@@ -1,0 +1,270 @@
+{% extends 'layouts/app.twig' %}
+
+{# One person with a button to check them in for the day, or take it back #}
+{% macro person(person, day, open, shifts = null) %}
+    <li class="d-flex flex-wrap align-items-center gap-2 py-1">
+        <form method="post" action="{{ url('/admin/telegram/checkins/set') }}" class="d-inline">
+            {{ csrf() }}
+            <input type="hidden" name="user" value="{{ person.user.id }}">
+            <input type="hidden" name="day" value="{{ day }}">
+            <input type="hidden" name="open" value="{{ open }}">
+            {% if person.checked_in %}
+                <button type="submit" class="btn btn-sm btn-success" title="Checked in, click to take it back">✓ in</button>
+            {% else %}
+                <input type="hidden" name="checked_in" value="1">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">check in</button>
+            {% endif %}
+        </form>
+        <span>
+            <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">{{ person.user.displayName }}</a>
+            {%- if person.lead %} <span class="badge bg-info">lead, not counted</span>{% endif %}
+            {%- if person.no_show %} <span class="badge bg-danger">no-show</span>{% endif %}
+            <span class="text-muted">
+                {{- person.handle ? ' @' ~ person.handle }}
+                {%- if shifts %} · {{ shifts }}{% endif %}
+                {%- if person.checked_in %} · checked in {{ person.time ? person.time.format('H:i') : 'by hand' }}{% endif %}
+                {%- if person.no_show and person.comment %} · “{{ person.comment }}”{% endif %}
+            </span>
+        </span>
+    </li>
+{% endmacro %}
+
+{% block title %}{{ __('telegram.checkins.title') }}{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-3 gap-2">
+            <h1 class="mb-0">{{ block('title') }}</h1>
+            <span class="text-muted small">
+                <a href="{{ url('/admin/telegram/dashboard') }}">{{ __('telegram.dashboard.title') }}</a>
+            </span>
+        </div>
+        {% include 'layouts/parts/messages.twig' %}
+
+        {% if days is empty %}
+            <p class="text-muted mb-5">There are no shifts yet, so there are no days to check in for.</p>
+        {% else %}
+            {# Per shift of the day #}
+            {% set day_value = day.toDateString() %}
+            <form method="get" action="{{ url('/admin/telegram/checkins') }}" class="row g-2 align-items-center mb-3">
+                <div class="col-auto">
+                    <label class="col-form-label" for="checkins-day">Day</label>
+                </div>
+                <div class="col-auto">
+                    <select class="form-select" name="day" id="checkins-day">
+                        {% for value, label in days %}
+                            <option value="{{ value }}"{% if value == day_value %} selected{% endif %}>
+                                {{ label }}{% if value == now.toDateString() %} (today){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-secondary" id="checkins-day-button">Show</button>
+                </div>
+            </form>
+
+            {# Who to look for: everyone on a shift that day not checked in, and the no-shows #}
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn {{ missing is empty ? 'btn-outline-success' : 'btn-outline-danger' }}"
+                        data-bs-toggle="collapse" data-bs-target="#open-missing"
+                        aria-expanded="{{ open == 'missing' ? 'true' : 'false' }}" aria-controls="open-missing">
+                    Not checked in ({{ missing|length }})
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#open-no-shows"
+                        aria-expanded="{{ open == 'no-shows' ? 'true' : 'false' }}" aria-controls="open-no-shows">
+                    No-shows ({{ no_shows|length }})
+                </button>
+            </div>
+            <div class="collapse{{ open == 'missing' ? ' show' }}" id="open-missing">
+                <div class="card card-body mb-3">
+                    {% if missing is empty %}
+                        <p class="text-success mb-0">Every volunteer on a shift that day checked in.</p>
+                    {% else %}
+                        <p class="small text-muted">Volunteers on a shift that day who haven't checked in; leads and no-shows aren't listed.</p>
+                        <ul class="list-unstyled small mb-0">
+                            {% for person in missing %}
+                                {{ _self.person(person, day_value, 'missing', person.shifts|join(', ')) }}
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="collapse{{ open == 'no-shows' ? ' show' }}" id="open-no-shows">
+                <div class="card card-body mb-3">
+                    {% if no_shows is empty %}
+                        <p class="text-muted mb-0">No no-shows that day.</p>
+                    {% else %}
+                        <p class="small text-muted">Marked as no-show on their shift (Engelsystem's "freeloaded"), leads too.</p>
+                        <ul class="list-unstyled small mb-0">
+                            {% for person in no_shows %}
+                                {{ _self.person(person, day_value, 'no-shows', person.shift) }}
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="table-responsive mb-2">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Shift</th><th>Area</th>
+                            <th class="text-end">Checked in</th><th class="text-end">Assigned</th><th class="text-end">Needed</th>
+                            <th class="text-end">No-shows</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in shifts %}
+                            <tr id="open-{{ row.id }}"{% if row.over %} class="text-muted"{% endif %}>
+                                <td>
+                                    <a href="{{ url('/shifts', {'action': 'view', 'shift_id': row.shift.id}) }}">
+                                        {{ row.shift.start.format('H:i') }}–{{ row.shift.end.format('H:i') }}
+                                    </a>
+                                    <span class="small text-muted">{{ row.shift.title }}</span>
+                                    {% if row.over %}<span class="badge bg-secondary">over</span>{% endif %}
+                                </td>
+                                <td>{{ row.angel_type.name }}</td>
+                                <td class="text-end fw-bold {{ row.missing ? 'text-danger' : (row.filled ? 'text-success') }}">
+                                    {{ row.checked_in }}
+                                </td>
+                                <td class="text-end">{{ row.filled }}</td>
+                                <td class="text-end {{ row.filled < row.needed ? 'text-warning fw-bold' }}">{{ row.needed }}</td>
+                                <td class="text-end">{{ row.no_shows ?: '' }}</td>
+                                <td class="text-end">
+                                    {% if row.groups is not empty %}
+                                        <button type="button" class="btn btn-sm btn-link py-0" data-bs-toggle="collapse"
+                                                data-bs-target="#people-{{ row.id }}" aria-expanded="{{ row.id == open ? 'true' : 'false' }}"
+                                                aria-controls="people-{{ row.id }}">people</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% if row.groups is not empty %}
+                                <tr class="collapse{{ row.id == open ? ' show' }}" id="people-{{ row.id }}">
+                                    <td colspan="7" class="ps-4">
+                                        {% for group, people in row.groups %}
+                                            <div class="small fw-bold mt-1">{{ group }} ({{ people|length }})</div>
+                                            <ul class="list-unstyled small mb-1">
+                                                {% for person in people %}
+                                                    {{ _self.person(person, day_value, row.id) }}
+                                                {% endfor %}
+                                            </ul>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                    {% if shifts is not empty %}
+                        <tfoot>
+                            <tr class="fw-bold">
+                                <td colspan="2">All shifts</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.checked_in, 0) }}</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.filled, 0) }}</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.needed, 0) }}</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.no_shows, 0) ?: '' }}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+            <p class="small text-muted mb-5">
+                Volunteers only, leads are listed but not counted · checked in: scanned the day's QR code at the
+                check-in desk, or checked in here · assigned: on the shift, without no-shows · someone on two shifts
+                that day counts on both · <b>people</b> lists everyone on the shift, to check them in by hand
+            </p>
+
+            {# By hand, for any day #}
+            <h2 class="h4" id="find">Find someone</h2>
+            <p class="text-muted">
+                For people who can't scan the check-in QR code at the desk, or a check-in set by mistake.
+                Counts like a scan at the desk, but without a time: it shows "by hand" until they scan the code that day.
+            </p>
+            <form method="get" action="{{ url('/admin/telegram/checkins') }}#find" class="row g-2 mb-4">
+                <input type="hidden" name="day" value="{{ day_value }}">
+                <div class="col-sm-8 col-md-6">
+                    <input type="search" class="form-control" name="search" value="{{ search }}"
+                           placeholder="Name, username or Telegram handle" aria-label="Name, username or Telegram handle">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">Find</button>
+                </div>
+            </form>
+
+            {% if people is not empty %}
+                <div class="table-responsive mb-2">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Person</th>
+                                {% for value, label in days %}<th class="text-center">{{ label }}</th>{% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for person in people %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">{{ person.user.displayName }}</a>
+                                        {%- if person.lead %} <span class="badge bg-info">lead</span>{% endif %}
+                                        <br><span class="small text-muted">
+                                            {{ person.handle ? '@' ~ person.handle : person.user.name }}
+                                            {%- if person.areas is not empty %} · {{ person.areas|join(', ') }}{% endif %}
+                                        </span>
+                                    </td>
+                                    {% for value, label in days %}
+                                        {% set checked_in = value in person.days %}
+                                        <td class="text-center">
+                                            <form method="post" action="{{ url('/admin/telegram/checkins/set') }}" class="d-inline">
+                                                {{ csrf() }}
+                                                <input type="hidden" name="user" value="{{ person.user.id }}">
+                                                <input type="hidden" name="day" value="{{ value }}">
+                                                <input type="hidden" name="search" value="{{ search }}">
+                                                <input type="hidden" name="view_day" value="{{ day_value }}">
+                                                {% if checked_in %}
+                                                    <button type="submit" class="btn btn-sm btn-success"
+                                                            title="Checked in {{ label }}, click to take it back">✓ in</button>
+                                                {% else %}
+                                                    <input type="hidden" name="checked_in" value="1">
+                                                    <button type="submit" class="btn btn-sm btn-outline-secondary"
+                                                            title="Not checked in {{ label }}, click to check in">check in</button>
+                                                {% endif %}
+                                            </form>
+                                        </td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mb-5">
+                    {% if more %}Only the first {{ people|length }} matches are shown, search for more of the name. {% endif %}
+                    Green: checked in, click to take it back. Every change shows in the
+                    <a href="{{ url('/admin/logs', {'search': 'checked in'}) }}">log</a>.
+                </p>
+            {% elseif search %}
+                <p class="text-muted mb-5">Nobody found for "{{ search }}".</p>
+            {% endif %}
+
+            <h2 class="h4">Leads</h2>
+            <p>
+                Checks in all {{ leads.people }} leads (supporters of any area) for every day with shifts:
+                {{ days|join(', ') }}.
+                {% if leads.missing %}
+                    {{ leads.missing }} check-ins are missing.
+                {% else %}
+                    <span class="text-success">Every lead is checked in for every day.</span>
+                {% endif %}
+                Leads aren't counted on the dashboard either way. Someone who becomes a lead later needs this again.
+            </p>
+            <form method="post" action="{{ url('/admin/telegram/checkins/leads') }}" class="mb-5">
+                {{ csrf() }}
+                <button type="submit" class="btn btn-primary"{% if not leads.missing %} disabled{% endif %}>
+                    Check in all leads for every day
+                </button>
+            </form>
+        {% endif %}
+    </div>
+
+    <script src="{{ url('/admin/telegram/checkins.js') }}"></script>
+{% endblock %}

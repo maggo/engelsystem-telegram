@@ -9,7 +9,6 @@ use Engelsystem\Models\AngelType;
 use Engelsystem\Models\Shifts\Shift;
 use Engelsystem\Models\Shifts\ShiftEntry;
 use Engelsystem\Models\User\User;
-use Engelsystem\Models\UserAngelType;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -401,11 +400,7 @@ class Swap
             ->where('angel_type_id', $side['area']->id)
             ->get();
         $accounts = TelegramAccount::query()->whereIn('user_id', $entries->pluck('user_id'))->get()->keyBy('user_id');
-        $leadIds = UserAngelType::query()
-            ->where('angel_type_id', $side['area']->id)
-            ->where('supporter', true)
-            ->pluck('user_id')
-            ->all();
+        $leadIds = Roster::leadIds()->all();
         $checkedIn = $today ? Checkin::usersOn($shift->start, $entries->pluck('user_id')) : [];
         $staffing = Roster::staffing($shift, $side['area']->id);
 
@@ -415,6 +410,10 @@ class Swap
             'over'   => $shift->end <= Carbon::now(),
             'filled' => $staffing['filled'],
             'needed' => $staffing['needed'],
+            // For the page to work out the numbers after a move: leads count neither as needed nor
+            // as filled, see Roster::volunteers()
+            'total'  => (int) Roster::needed($shift)->where('angel_type_id', $side['area']->id)->sum('count'),
+            'leads'  => $entries->whereIn('user_id', $leadIds)->count(),
             'people' => $entries
                 ->map(fn(ShiftEntry $entry) => [
                     'id'         => $entry->id,
@@ -441,6 +440,7 @@ class Swap
         /** @var Shift $shift */
         $shift = $side['shift'];
         $users = self::freeDuring($shift)->with(['personalData', 'state'])->get();
+        $leadIds = Roster::leadIds()->all();
         $accounts = TelegramAccount::query()->whereIn('user_id', $users->pluck('id'))->get()->keyBy('user_id');
         $checkedIn = $today ? Checkin::usersOn($shift->start, $users->pluck('id')) : [];
 
@@ -448,15 +448,17 @@ class Swap
             'name'   => self::FREE_NAME,
             'time'   => 'not on a shift ' . $shift->start->format('H:i') . '–' . $shift->end->format('H:i'),
             'over'   => false,
-            'filled' => $users->count(),
+            'filled' => $users->whereNotIn('id', $leadIds)->count(),
             'needed' => null,
+            'total'  => null,
+            'leads'  => 0,
             'people' => $users
                 ->map(fn(User $user) => [
                     'id'         => $user->id,
                     'name'       => $user->displayName,
                     'handle'     => $accounts->get($user->id)?->username,
                     'telegram'   => (bool) $accounts->get($user->id)?->chat_id,
-                    'lead'       => false,
+                    'lead'       => in_array($user->id, $leadIds),
                     'onboarded'  => $user->state->arrived,
                     'checked_in' => in_array($user->id, $checkedIn),
                     'no_show'    => false,

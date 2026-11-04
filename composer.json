@@ -43,10 +43,26 @@
             "/admin/telegram": "Telegram\\Plugin\\AdminController@index",
             "/admin/telegram/dashboard": "Telegram\\Plugin\\AdminController@dashboard",
             "/admin/telegram/dashboard.js": "Telegram\\Plugin\\AdminController@dashboardScript",
+            "/admin/telegram/checkins": "Telegram\\Plugin\\AdminController@checkins",
+            "/admin/telegram/checkins.js": "Telegram\\Plugin\\AdminController@checkinsScript",
+            "/admin/telegram/checkins/set": [
+                "Telegram\\Plugin\\AdminController@checkinsSet",
+                "POST"
+            ],
+            "/admin/telegram/checkins/leads": [
+                "Telegram\\Plugin\\AdminController@checkinsLeads",
+                "POST"
+            ],
             "/admin/telegram/swap": "Telegram\\Plugin\\AdminController@swap",
             "/admin/telegram/swap.js": "Telegram\\Plugin\\AdminController@swapScript",
             "/admin/telegram/swap/move": [
                 "Telegram\\Plugin\\AdminController@swapMove",
+                "POST"
+            ],
+            "/admin/telegram/needs": "Telegram\\Plugin\\AdminController@needs",
+            "/admin/telegram/needs.js": "Telegram\\Plugin\\AdminController@needsScript",
+            "/admin/telegram/needs/save": [
+                "Telegram\\Plugin\\AdminController@needsSave",
                 "POST"
             ],
             "/admin/telegram/import": [
@@ -70,7 +86,16 @@
                 "Telegram\\Plugin\\BotController@webhook",
                 "POST"
             ],
-            "/telegram/tick": "Telegram\\Plugin\\BotController@tick"
+            "/telegram/tick": "Telegram\\Plugin\\BotController@tick",
+            "/telegram/api/shifts": "Telegram\\Plugin\\ApiController@shifts",
+            "/telegram/api/entries": "Telegram\\Plugin\\ApiController@entries",
+            "/telegram/api/checkins": "Telegram\\Plugin\\ApiController@checkins",
+            "/telegram/api/people": "Telegram\\Plugin\\ApiController@people",
+            "/telegram/api/log": "Telegram\\Plugin\\ApiController@log",
+            "/telegram/api/{resource:.+}": [
+                "Telegram\\Plugin\\ApiController@options",
+                "OPTIONS"
+            ]
         }
     },
     "autoload": {

@@ -7,7 +7,7 @@ Runs volunteer shifts over Telegram, on top of an unchanged [Engelsystem](https:
 - **Leads** (supporters of an area): team roster, who is on which shift (`/roster`, for coordinators every area), roll call 15 minutes before the shift (and any time with `/rollcall`, also for a lead added later; coordinators lead every shift they're on), no-shows (once the roll call is out), open slots and replacements (from their area, or only from a standby area if there is one).
 - **News:** a new Engelsystem news with *Send notification* ticked goes to everyone on Telegram.
 - **Desk:** a daily check-in QR code, and one that completes onboarding.
-- **Admins:** CSV imports for the shifts and the volunteers (with their areas, lead roles and shifts), setting or resetting someone's Telegram link, a dashboard (shifts today and tomorrow with open slots or people not checked in, onboarding per area), and a page to swap people between two shifts of the same half day (the bot tells them, their leads and coordination).
+- **Admins:** CSV imports for the shifts and the volunteers (with their areas, lead roles and shifts), setting or resetting someone's Telegram link, a dashboard (shifts today and tomorrow with open slots or people not checked in, onboarding per area), and a page to swap people between two shifts of the same half day (the bot tells them, their leads and coordination), and a table of every shift's needed volunteers to change many at once.
 - **Connecting:** an account connects to Telegram by username only when an admin set that username (CSV import, or *Set or reset a Telegram link*). Otherwise people log in and connect under Settings > OAuth, as with any Engelsystem OAuth provider. The Engelsystem username is never matched.
 
 Everything that counts is stored the Engelsystem way (arrival, shift entries, no-shows), so the same can be done in Engelsystem itself when the bot is down.
@@ -38,6 +38,20 @@ A standby area is an ordinary area (angel type) with its own shifts, for volunte
 - The standby shift itself has no gap alerts and doesn't show in open slots, it is meant to shrink.
 - Everything else works like any area: reminders, roll call (to coordination if the shift has no lead), no-shows.
 - If the name matches no area, nobody is offered and leads are told the setting is wrong.
+
+## API
+
+Read-only JSON for dashboards, with what Engelsystem's own API doesn't show. Authenticate like Engelsystem's API, with your key from **Settings > API** in an `Authorization: Bearer <key>` or `x-api-key` header (never in the URL). The account needs the `api` privilege and `admin_user`; the log also `admin_log`. Engelsystem only accepts keys under `/api` and a plugin can't add routes there, so these live under `/telegram/api`.
+
+| Path | One row per |
+|---|---|
+| `GET /telegram/api/shifts[?day=YYYY-MM-DD]` | shift and area: volunteers needed, filled and open (leads count as neither), no-shows, the leads, Engelsystem's own need, when the roll call went out |
+| `GET /telegram/api/entries[?day=…]` | person on a shift, no-shows included: onboarded, checked in that day (and when), marked here by a lead, moved there as a replacement, reminder sent, no-show (by whom, comment), entry comment |
+| `GET /telegram/api/checkins[?day=…]` | person and day, for everyone who checked in or had a shift that day: when (`by_hand` when an admin checked them in), their shifts that day |
+| `GET /telegram/api/people` | account: areas (and which they lead), onboarded and when, Telegram handle, connected to the bot |
+| `GET /telegram/api/log[?after=<id>][&since=<time>]` | Engelsystem log entry, oldest first, up to 5000; `next` is the `after` for the next page. `bot` marks what the bot wrote. The only record of moves and removals. |
+
+Without `day`, every day. Responses are `{"data": [...]}`; times are UTC, as in Engelsystem's API. Rows keep leads (`lead: true`, supporters of any area) so numbers of volunteers can leave them out.
 
 ## Updating
 

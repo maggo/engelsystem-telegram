@@ -75,7 +75,8 @@
                                 <h2 class="h5 mb-1">{{ column.name }}</h2>
                                 <p class="small text-muted mb-2"
                                    data-side="{{ side }}" data-name="{{ column.name }}"
-                                   data-filled="{{ column.filled }}" data-needed="{{ column.needed }}">
+                                   data-filled="{{ column.filled }}" data-needed="{{ column.needed }}"
+                                   data-total="{{ column.total }}" data-leads="{{ column.leads }}">
                                     {{ column.time }} · {{ column.filled }}{% if column.needed is not null %}/{{ column.needed }}{% endif %}
                                     {% if column.over %}<span class="badge bg-secondary">over</span>{% endif %}
                                 </p>
@@ -88,6 +89,7 @@
                                         <li class="list-group-item d-flex gap-2 align-items-start {{ person.no_show ? 'text-muted' }}">
                                             <input class="form-check-input flex-shrink-0 mt-1" type="checkbox"
                                                    name="from_{{ side }}[]" value="{{ person.id }}" id="swap-{{ side }}-{{ person.id }}"
+                                                   {{ person.lead ? 'data-lead' }}
                                                    {{ person.no_show or column.over ? 'disabled' }}>
                                             <label class="form-check-label flex-grow-1" for="swap-{{ side }}-{{ person.id }}">
                                                 {% if person.lead %}👤 {% endif %}{{ person.name }}
@@ -112,7 +114,7 @@
                         <button type="submit" class="btn btn-primary" id="swap-button">Move the ticked people</button>
                         <span class="small text-muted" id="swap-after"></span>
                     </div>
-                    <p class="small text-muted mt-2">👤 lead · 📍 checked in today. No-shows stay where they are.</p>
+                    <p class="small text-muted mt-2">👤 lead, not counted · 📍 checked in today. No-shows stay where they are.</p>
                 </form>
             {% endif %}
         {% endif %}

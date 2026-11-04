@@ -18,7 +18,8 @@ use Illuminate\Support\Collection;
 /**
  * Read and write helpers around areas (angel types), shifts and who is on them
  *
- * A lead is a supporter of the area who is assigned to the shift.
+ * The shift's leads are the supporters of its area who are on it (they get its roll call). In
+ * numbers, anyone who leads any area is a lead and never counted as a volunteer, see volunteers().
  */
 class Roster
 {
@@ -129,21 +130,45 @@ class Roster
     }
 
     /**
-     * @return array{needed: int, filled: int} per area on a shift; no-shows don't count as filled
+     * @return Collection<int> everyone who leads an area; numbers of volunteers never include them
+     */
+    public static function leadIds(): Collection
+    {
+        return UserAngelType::query()->where('supporter', true)->distinct()->pluck('user_id');
+    }
+
+    /**
+     * @return array{needed: int, filled: int} volunteers per area on a shift, see volunteers()
      */
     public static function staffing(Shift $shift, int $angelTypeId): array
     {
         $needed = (int) self::needed($shift)->where('angel_type_id', $angelTypeId)->sum('count');
-        $filled = $shift->shiftEntries()
-            ->where('angel_type_id', $angelTypeId)
-            ->whereNull('freeloaded_by')
-            ->count();
+        $entries = $shift->shiftEntries()->where('angel_type_id', $angelTypeId)->get();
 
-        return ['needed' => $needed, 'filled' => $filled];
+        return self::volunteers($needed, $entries, self::leadIds());
     }
 
     /**
-     * @return Collection<array{shift: Shift, angel_type: AngelType, needed: int, filled: int}> open slots
+     * Volunteers only: the leads on the shift count neither as needed (Engelsystem's need includes
+     * the lead's slot) nor as filled, so needed - filled is Engelsystem's open slots. A lead marked
+     * no-show keeps their slot out of needed too, a volunteer can't fill a lead's slot; volunteer
+     * no-shows don't count as filled, as in Engelsystem
+     *
+     * @param Collection<ShiftEntry> $entries the area's entries on the shift, no-shows included
+     * @return array{needed: int, filled: int}
+     */
+    public static function volunteers(int $needed, Collection $entries, Collection $leadIds): array
+    {
+        $isLead = fn(ShiftEntry $entry) => $leadIds->contains($entry->user_id);
+
+        return [
+            'needed' => max(0, $needed - $entries->filter($isLead)->count()),
+            'filled' => $entries->reject($isLead)->whereNull('freeloaded_by')->count(),
+        ];
+    }
+
+    /**
+     * @return Collection<array{shift: Shift, angel_type: AngelType, needed: int, filled: int}> open slots, volunteers only
      */
     public static function gaps(Carbon $from, Carbon $until): Collection
     {
@@ -155,6 +180,7 @@ class Roster
             ->get();
         // Standby shrinks as people step in, that's not a gap to fill
         $standby = self::standbyArea();
+        $leadIds = self::leadIds();
 
         $gaps = new Collection();
         foreach ($shifts as $shift) {
@@ -162,17 +188,13 @@ class Roster
                 if ($needed->angel_type_id === $standby?->id) {
                     continue;
                 }
-                $filled = $shift->shiftEntries
-                    ->where('angel_type_id', $needed->angel_type_id)
-                    ->whereNull('freeloaded_by')
-                    ->count();
-                if ($filled < $needed->count) {
-                    $gaps->push([
-                        'shift'      => $shift,
-                        'angel_type' => $needed->angelType,
-                        'needed'     => $needed->count,
-                        'filled'     => $filled,
-                    ]);
+                $staffing = self::volunteers(
+                    $needed->count,
+                    $shift->shiftEntries->where('angel_type_id', $needed->angel_type_id),
+                    $leadIds
+                );
+                if ($staffing['filled'] < $staffing['needed']) {
+                    $gaps->push(['shift' => $shift, 'angel_type' => $needed->angelType, ...$staffing]);
                 }
             }
         }

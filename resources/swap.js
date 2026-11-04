@@ -14,8 +14,8 @@
     var button = document.getElementById('swap-button');
     var after = document.getElementById('swap-after');
 
-    var ticked = function (side) {
-        return form.querySelectorAll('input[name="from_' + side + '[]"]:checked').length;
+    var ticked = function (side, leads) {
+        return form.querySelectorAll('input[name="from_' + side + '[]"]:checked' + (leads ? '[data-lead]' : '')).length;
     };
 
     var name = function (side) {
@@ -31,12 +31,21 @@
             : right ? 'Move ' + right + ' to ' + name('left')
             : 'Tick people to move';
 
-        var change = { left: right - left, right: left - right };
+        // Volunteers only: a lead counts neither as needed nor as filled, as in Roster::volunteers()
+        var leadsLeft = ticked('left', true);
+        var leadsRight = ticked('right', true);
+        var change = {
+            left: { volunteers: (right - leadsRight) - (left - leadsLeft), leads: leadsRight - leadsLeft },
+            right: { volunteers: (left - leadsLeft) - (right - leadsRight), leads: leadsLeft - leadsRight }
+        };
         after.textContent = left + right === 0 ? '' : 'After: ' + Array.prototype.map.call(
             form.querySelectorAll('[data-side]'),
             function (column) {
-                var count = Number(column.dataset.filled) + change[column.dataset.side];
-                return column.dataset.name + ' ' + count + (column.dataset.needed ? '/' + column.dataset.needed : '');
+                var moved = change[column.dataset.side];
+                var count = Number(column.dataset.filled) + moved.volunteers;
+                var needed = column.dataset.needed === '' ? ''
+                    : '/' + Math.max(0, Number(column.dataset.total) - Number(column.dataset.leads) - moved.leads);
+                return column.dataset.name + ' ' + count + needed;
             }
         ).join(' · ');
     };
