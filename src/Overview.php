@@ -13,8 +13,9 @@ use Illuminate\Support\Collection;
 /**
  * A day's shifts at a glance, for a screen: per shift and area how many volunteers are needed,
  * assigned, checked in at the desk, marked here in the roll call and marked no-show, grouped by
- * half day (AM starts before noon, as in the import), with the day's totals. The numbers are
- * Attendance's, so leads aren't counted.
+ * half day (AM starts before noon, as in the import), with the day's totals, and how many of the
+ * arrived volunteers checked in that day. The numbers are Attendance's, so leads aren't
+ * counted.
  */
 class Overview
 {
@@ -70,12 +71,26 @@ class Overview
             ])
             ->values();
 
+        // The volunteers in Engelsystem: arrived (onboarded), in an area (so not the admin account)
+        // and not a lead; how many of them checked in that day, also without a shift
+        $volunteers = User::query()
+            ->whereNotIn('id', Roster::leadIds())
+            ->whereIn('id', UserAngelType::query()->select('user_id'))
+            ->whereHas('state', fn($query) => $query->whereArrived(true))
+            ->pluck('id');
+        $everyone = [
+            'checked_in' => Checkin::query()->where('day', $data['day']->toDateString())
+                ->whereIn('user_id', $volunteers)->count(),
+            'volunteers' => $volunteers->count(),
+        ];
+
         return [
-            'now'    => $now,
-            'day'    => $data['day'],
-            'days'   => $data['days'],
-            'totals' => self::totals($rows),
-            'slots'  => $slots,
+            'now'      => $now,
+            'day'      => $data['day'],
+            'days'     => $data['days'],
+            'totals'   => self::totals($rows),
+            'everyone' => $everyone,
+            'slots'    => $slots,
         ];
     }
 

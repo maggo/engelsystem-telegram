@@ -57,6 +57,8 @@
         .top h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
         .top .date { font-size: 28px; font-weight: 650; letter-spacing: -.02em; line-height: 1.15; }
         .top .date small { font-size: 13px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 3px 9px; vertical-align: 5px; margin-left: 6px; letter-spacing: 0; }
+        .top .byline { margin-top: 2px; font-size: 14px; color: var(--muted); }
+        .top .byline b { color: var(--text); font-weight: 600; }
         .side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
         .days { display: flex; flex-wrap: wrap; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
         .days a { text-decoration: none; padding: 6px 12px; border-radius: 7px; font-size: 14px; font-weight: 500; color: var(--muted); white-space: nowrap; }
@@ -151,6 +153,7 @@
         <div>
             <h1>{{ __('telegram.overview.title') }}</h1>
             <div class="date">{{ day.format('l, F j') }}{% if day.toDateString() == today %}<small>Today</small>{% endif %}</div>
+            <div class="byline" title="Arrived volunteers who checked in at the desk that day, with or without a shift, out of every arrived volunteer in an area (no leads)"><b>{{ everyone.checked_in }}</b>/{{ everyone.volunteers }} volunteers checked in · {{ _self.pct(everyone.checked_in, everyone.volunteers) }}%</div>
         </div>
         <div class="side">
             {% if days|length > 1 %}
@@ -180,7 +183,7 @@
                 <div class="sub">volunteers on {{ slots|reduce((sum, slot) => sum + slot.rows|length, 0) }} shifts</div>
             </div>
             <div class="kpi info">
-                <div class="label">Checked in</div>
+                <div class="label">Checked in on shifts</div>
                 <div class="value">{{ t.checked_in }}<span class="of">/{{ t.needed }}</span></div>
                 <div class="sub">{{ _self.pct(t.checked_in, t.needed) }}% of needed, at the desk</div>
                 <div class="bar"><span style="width: {{ _self.pct(t.checked_in, t.needed) }}%"></span></div>
@@ -265,6 +268,7 @@
 
     <footer class="legend">
         <div><b>Needed</b>: volunteers only; leads are never counted or listed, the shift's lead is named under the area.</div>
+        <div><b>Volunteers checked in</b> (under the date): arrived volunteers who checked in at the desk that day, with or without a shift, out of every arrived volunteer in an area; leads and accounts without an area (like admin) aren't counted.</div>
         <div><b>Checked in</b>: volunteers on the shift who scanned the day's code at the desk or were checked in by hand, out of needed.</div>
         <div><b>Working in shift</b>: the final confirmation, volunteers on the shift their lead marked here in the roll call (sent 15 minutes before the shift), out of needed.</div>
         <div><b>No-shows</b>: marked in Engelsystem or in the roll call. Click a shift to see who is on it.</div>

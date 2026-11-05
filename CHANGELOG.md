@@ -25,8 +25,9 @@ admin entering something.
 - **Shift overview:** Admin > *Shift overview* (coordinators only), a page of its own for a
   screen. For a day (picked at the top): volunteers needed, and out of those how many checked in
   at the desk and how many their lead marked here in the roll call, plus no-shows; below, the same
-  per area for AM and PM, with the shift's lead and who is on each shift. Updates itself every 30
-  seconds, not while someone uses it.
+  per area for AM and PM, with the shift's lead and who is on each shift. Under the date, how many
+  of all volunteers checked in that day, with or without a shift (arrived, in an area, no leads).
+  Updates itself every 30 seconds, not while someone uses it.
 - **Attendance:** also shows per shift how many of those assigned checked in at the desk and
   how many their lead marked here in the roll call. Leads aren't listed any more (they count as
   checked in), also not among the no-shows. Lists of people are in order of status: here in the
