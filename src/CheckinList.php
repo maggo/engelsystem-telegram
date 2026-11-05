@@ -5,23 +5,22 @@ declare(strict_types=1);
 namespace Telegram\Plugin;
 
 use Carbon\Carbon;
-use Engelsystem\Models\Shifts\Shift;
-use Engelsystem\Models\Shifts\ShiftEntry;
 use Engelsystem\Models\User\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * Check-ins per shift of a day: how many checked in, are assigned and are needed, with everyone on
- * the shift; and check-ins by hand: an admin checks people in, or takes a check-in back, for any
- * day with shifts, e.g. for someone whose phone died, and checks in every lead for every day
+ * The daily check-in at the desk, per volunteer: who with a shift that day checked in and who
+ * didn't; and check-ins by hand: an admin checks people in, or takes a check-in back, for any day
+ * with shifts, e.g. for someone whose phone died, and checks in every lead for every day. Shift
+ * attendance (no-shows) is Attendance.
  */
 class CheckinList
 {
     public const MAX_RESULTS = 50;
 
     /**
-     * @param string|null $day    the day whose shifts are shown, today by default
+     * @param string|null $day    the day whose check-ins are shown, today by default
      * @param string|null $search part of a name or Telegram handle
      * @param int|null    $userId one person, e.g. from the dashboard's list of who hasn't checked in
      */
@@ -57,7 +56,7 @@ class CheckinList
         return [
             'now'    => $now,
             'day'    => $date,
-            ...self::shifts($days->isEmpty() ? null : $date, $now, $leads),
+            ...self::day($days->isEmpty() ? null : $date, $now, $leads),
             'days'   => $days->all(),
             'search' => $userId ? '' : $search,
             'more'   => $more,
@@ -77,103 +76,58 @@ class CheckinList
     }
 
     /**
-     * Per shift and area of the day: volunteers checked in at the desk that day, assigned (no-shows
-     * aren't, as in Engelsystem), needed and no-shows; leads count in none of them, see
-     * Roster::volunteers(), but are listed with everyone else on the shift. And the day's volunteers
-     * on a shift who haven't checked in (once, with all their shifts), and its no-shows, leads too.
+     * The day's volunteers with a shift (no-shows on all their shifts aren't expected), each once
+     * with all their shifts, split into who checked in at the desk (by time, by hand last) and who
+     * didn't; leads aren't listed, they are checked in for every day at once
      *
-     * @return array{shifts: Collection, missing: Collection, no_shows: Collection}
+     * @return array{expected: int, checked_in: Collection, missing: Collection, without_shift: int}
      */
-    protected static function shifts(?Carbon $date, Carbon $now, Collection $leads): array
+    protected static function day(?Carbon $date, Carbon $now, Collection $leads): array
     {
         if (!$date) {
-            return ['shifts' => new Collection(), 'missing' => new Collection(), 'no_shows' => new Collection()];
+            return [
+                'expected'      => 0,
+                'checked_in'    => new Collection(),
+                'missing'       => new Collection(),
+                'without_shift' => 0,
+            ];
         }
 
-        $shifts = Shift::query()
-            ->with([
-                'schedule',
-                'neededAngelTypes.angelType',
-                'shiftEntries.angelType',
-                'shiftEntries.user.personalData',
-            ])
-            ->whereBetween('start', [$date->copy()->startOfDay(), $date->copy()->endOfDay()])
-            ->orderBy('start')
-            ->orderBy('title')
-            ->get();
-        $userIds = $shifts->flatMap->shiftEntries->pluck('user_id')->unique();
-        $times = Checkin::query()
-            ->where('day', $date->toDateString())
-            ->whereIn('user_id', $userIds)
-            ->get()
-            ->mapWithKeys(fn(Checkin $checkin) => [$checkin->user_id => $checkin->created_at]);
-        $handles = TelegramAccount::query()->whereIn('user_id', $userIds)->pluck('username', 'user_id');
-
-        $rows = new Collection();
-        foreach ($shifts as $shift) {
-            $needed = Roster::needed($shift);
-            $areas = $needed->pluck('angelType')->concat($shift->shiftEntries->pluck('angelType'))
-                ->unique('id')
-                ->sortBy('name');
-            foreach ($areas as $area) {
-                $all = $shift->shiftEntries->where('angel_type_id', $area->id);
-                $staffing = Roster::volunteers(
-                    (int) $needed->where('angel_type_id', $area->id)->sum('count'),
-                    $all,
-                    $leads
-                );
-                $id = $shift->id . '-' . $area->id;
-                $label = sprintf('%s–%s %s', $shift->start->format('H:i'), $shift->end->format('H:i'), $area->name);
-                $people = $all
-                    ->map(fn(ShiftEntry $entry) => [
-                        'user'       => $entry->user,
-                        'handle'     => $handles->get($entry->user_id),
-                        'lead'       => $leads->contains($entry->user_id),
-                        'no_show'    => $entry->freeloaded_by !== null,
-                        'comment'    => (string) $entry->freeloaded_comment,
-                        'checked_in' => $times->has($entry->user_id),
-                        'time'       => $times->get($entry->user_id),
-                        'row'        => $id,
-                        'shift'      => $label,
-                    ])
-                    // Leads first, then by name: the lists don't move while people are checked in
-                    ->sortBy(fn(array $person) => [!$person['lead'], mb_strtolower($person['user']->name)])
-                    ->values();
-                $volunteers = $people->where('lead', false)->where('no_show', false);
-                $rows->push([
-                    'id'         => $id,
-                    'shift'      => $shift,
-                    'angel_type' => $area,
-                    ...$staffing,
-                    'checked_in' => $volunteers->where('checked_in', true)->count(),
-                    'missing'    => $volunteers->where('checked_in', false)->count(),
-                    'no_shows'   => $people->where('lead', false)->where('no_show', true)->count(),
-                    'groups'     => array_filter([
-                        'Not checked in' => $people->where('no_show', false)->where('checked_in', false)->values(),
-                        'Checked in'     => $people->where('no_show', false)->where('checked_in', true)->values(),
-                        'No-shows'       => $people->where('no_show', true)->values(),
-                    ], fn(Collection $group) => $group->isNotEmpty()),
-                    'over'       => $shift->end <= $now,
-                ]);
-            }
-        }
-
-        $everyone = $rows->flatMap(fn(array $row) => collect($row['groups'])->flatten(1));
-        $missing = $everyone
-            ->filter(fn(array $person) => !$person['lead'] && !$person['no_show'] && !$person['checked_in'])
+        $onShifts = Attendance::rows($date, $now, $leads)->flatMap(fn(array $row) => $row['people']);
+        $people = $onShifts
+            ->filter(fn(array $person) => !$person['lead'] && !$person['no_show'])
             ->groupBy(fn(array $person) => $person['user']->id)
             ->map(fn(Collection $shifts) => [
                 ...$shifts->first(),
                 'shifts' => $shifts->pluck('shift')->unique()->values(),
-            ])
-            ->sortBy(fn(array $person) => [$person['shifts']->first(), mb_strtolower($person['user']->name)])
-            ->values();
-        $noShows = $everyone
-            ->where('no_show', true)
-            ->sortBy(fn(array $person) => [$person['shift'], mb_strtolower($person['user']->name)])
-            ->values();
+            ]);
+        $times = Checkin::query()
+            ->where('day', $date->toDateString())
+            ->get()
+            ->mapWithKeys(fn(Checkin $checkin) => [$checkin->user_id => $checkin->created_at]);
+        $people = $people->map(fn(array $person) => [
+            ...$person,
+            'checked_in' => $times->has($person['user']->id),
+            'time'       => $times->get($person['user']->id),
+        ]);
 
-        return ['shifts' => $rows, 'missing' => $missing, 'no_shows' => $noShows];
+        return [
+            'expected'      => $people->count(),
+            'checked_in'    => $people->where('checked_in', true)
+                ->sortBy(fn(array $person) => [
+                    $person['time']?->getTimestamp() ?? PHP_INT_MAX,
+                    mb_strtolower($person['user']->name),
+                ])
+                ->values(),
+            'missing'       => $people->where('checked_in', false)
+                ->sortBy(fn(array $person) => [$person['shifts']->first(), mb_strtolower($person['user']->name)])
+                ->values(),
+            // Leads and people on a shift that day (no-shows too) aren't "without a shift"
+            'without_shift' => $times->keys()
+                ->diff($leads)
+                ->diff($onShifts->map(fn(array $person) => $person['user']->id))
+                ->count(),
+        ];
     }
 
     /**

@@ -2,7 +2,7 @@
     "type": "engelsystem-plugin",
     "name": "telegram/plugin",
     "description": "Telegram login, onboarding, check-in and a shift bot for volunteers",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "license": "GPL-2.0-or-later",
     "homepage": "https://github.com/maggo/engelsystem-telegram",
     "extra": {
@@ -43,6 +43,10 @@
             "/admin/telegram": "Telegram\\Plugin\\AdminController@index",
             "/admin/telegram/dashboard": "Telegram\\Plugin\\AdminController@dashboard",
             "/admin/telegram/dashboard.js": "Telegram\\Plugin\\AdminController@dashboardScript",
+            "/admin/telegram/live": "Telegram\\Plugin\\AdminController@live",
+            "/admin/telegram/live.js": "Telegram\\Plugin\\AdminController@liveScript",
+            "/admin/telegram/overview": "Telegram\\Plugin\\AdminController@overview",
+            "/admin/telegram/overview.js": "Telegram\\Plugin\\AdminController@overviewScript",
             "/admin/telegram/checkins": "Telegram\\Plugin\\AdminController@checkins",
             "/admin/telegram/checkins.js": "Telegram\\Plugin\\AdminController@checkinsScript",
             "/admin/telegram/checkins/set": [
@@ -53,10 +57,17 @@
                 "Telegram\\Plugin\\AdminController@checkinsLeads",
                 "POST"
             ],
+            "/admin/telegram/attendance": "Telegram\\Plugin\\AdminController@attendance",
             "/admin/telegram/swap": "Telegram\\Plugin\\AdminController@swap",
             "/admin/telegram/swap.js": "Telegram\\Plugin\\AdminController@swapScript",
             "/admin/telegram/swap/move": [
                 "Telegram\\Plugin\\AdminController@swapMove",
+                "POST"
+            ],
+            "/admin/telegram/standby": "Telegram\\Plugin\\AdminController@standby",
+            "/admin/telegram/standby.js": "Telegram\\Plugin\\AdminController@standbyScript",
+            "/admin/telegram/standby/move": [
+                "Telegram\\Plugin\\AdminController@standbyMove",
                 "POST"
             ],
             "/admin/telegram/needs": "Telegram\\Plugin\\AdminController@needs",

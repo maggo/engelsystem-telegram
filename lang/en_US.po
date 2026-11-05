@@ -43,14 +43,26 @@ msgstr "Today's check-in QR code"
 msgid "telegram.dashboard.title"
 msgstr "Volunteer dashboard"
 
+msgid "telegram.live.title"
+msgstr "Live dashboard"
+
+msgid "telegram.overview.title"
+msgstr "Shift overview"
+
 msgid "telegram.swap.title"
 msgstr "Swap people"
+
+msgid "telegram.standby.title"
+msgstr "Standby moves"
 
 msgid "telegram.needs.title"
 msgstr "Needed volunteers"
 
 msgid "telegram.checkins.title"
-msgstr "Check-ins"
+msgstr "Check-in"
+
+msgid "telegram.attendance.title"
+msgstr "Attendance"
 
 msgid "telegram.admin.onboarding.title"
 msgstr "Onboarding codes"

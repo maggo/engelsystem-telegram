@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Telegram\Plugin;
 
-use Carbon\Carbon;
 use Engelsystem\Models\Shifts\NeededAngelType;
 use Engelsystem\Models\Shifts\Shift;
 use Engelsystem\Models\User\User;
@@ -16,14 +15,14 @@ use InvalidArgumentException;
  *
  * The numbers are volunteers, as everywhere in the plugin: Engelsystem's need also holds a slot for
  * each lead on the shift, so saving writes the volunteers plus the area's leads on the shift
- * (no-shows included, see Roster::volunteers()). Shifts that are over and shifts from a schedule
- * (whose need comes from the shift type or location) can't be changed here.
+ * (no-shows included, see Roster::volunteers()). Shifts that are over can be changed too, as in
+ * Engelsystem's shift edit; shifts from a schedule can't (their need comes from the shift type or
+ * location).
  */
 class Needs
 {
     public static function data(): array
     {
-        $now = Carbon::now();
         $leadIds = Roster::leadIds();
         $shifts = Shift::query()
             ->with(['schedule', 'neededAngelTypes.angelType', 'shiftEntries'])
@@ -48,7 +47,7 @@ class Needs
                     'volunteers' => $staffing['needed'],
                     'filled'     => $staffing['filled'],
                     'leads'      => $entries->filter(fn($entry) => $leadIds->contains($entry->user_id))->count(),
-                    'editable'   => !$shift->schedule && $shift->end > $now,
+                    'editable'   => !$shift->schedule,
                 ];
             }
         }
@@ -73,7 +72,6 @@ class Needs
      */
     public static function save(array $needs, array $before, User $by): array
     {
-        $now = Carbon::now();
         $leadIds = Roster::leadIds();
         $changes = [];
 
@@ -87,27 +85,28 @@ class Needs
                 if (!ctype_digit($value) || (int) $value > 999) {
                     throw new InvalidArgumentException(sprintf('"%s" is not a number of volunteers.', $value));
                 }
-                $changes[] = [(int) $shiftId, (int) $areaId, (int) $value];
+                $changes[] = [(int) $shiftId, (int) $areaId, (int) $value, $was];
             }
         }
         if (!$changes) {
             return [];
         }
 
-        return app('db.connection')->transaction(function () use ($changes, $now, $leadIds, $by): array {
+        return app('db.connection')->transaction(function () use ($changes, $leadIds, $by): array {
             $done = [];
-            foreach ($changes as [$shiftId, $areaId, $volunteers]) {
+            foreach ($changes as [$shiftId, $areaId, $volunteers, $was]) {
                 $shift = Shift::query()->with('schedule')->find($shiftId);
                 $need = NeededAngelType::query()
                     ->with('angelType')
                     ->where('shift_id', $shiftId)
                     ->where('angel_type_id', $areaId)
+                    ->lockForUpdate()
                     ->first();
                 if (!$shift || !$need) {
                     throw new InvalidArgumentException('A shift changed meanwhile, nothing was saved. Please reload.');
                 }
                 $label = sprintf('%s %s', $need->angelType->name, $shift->start->format('D M j H:i'));
-                if ($shift->schedule || $shift->end <= $now) {
+                if ($shift->schedule) {
                     throw new InvalidArgumentException(sprintf('%s can\'t be changed here, nothing was saved.', $label));
                 }
 
@@ -116,6 +115,14 @@ class Needs
                     ->whereIn('user_id', $leadIds)
                     ->count();
                 $old = Roster::volunteers($need->count, $shift->shiftEntries()->where('angel_type_id', $areaId)->get(), $leadIds);
+                // Someone else saved this cell since the page was loaded
+                if ((string) $old['needed'] !== $was) {
+                    throw new InvalidArgumentException(sprintf(
+                        '%s was changed meanwhile (now %d volunteers), nothing was saved. Please reload.',
+                        $label,
+                        $old['needed']
+                    ));
+                }
                 $need->count = $volunteers + $leads;
                 $need->save();
                 $shift->updatedBy()->associate($by);

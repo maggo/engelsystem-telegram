@@ -4,14 +4,34 @@ Each release is tagged `vX.Y.Z`, matching `version` in `composer.json`. Releases
 migrations or new settings say so, as they need **Admin > Plugins > Telegram > Update** or an
 admin entering something.
 
-## Unreleased
+## 1.3.0 (2026-11-05)
 
+- **Tested against:** Engelsystem `main` at `f09f95ec`.
+- **No migration, no new settings.** New routes under `/admin/telegram` (`checkins`, `live`,
+  `overview`, `attendance`, `needs`, `standby`) and `/telegram/api`; a cached route list must not
+  survive the deploy.
 - **Check-ins:** Admin > *Check-ins* (coordinators only) shows a day's check-ins per shift, who on
   a shift hasn't checked in and the no-shows; an admin can check someone in for any day with
   shifts or take a check-in back (for a dead phone, say), and check in every lead for every day
   at once. Check-ins by hand have no time until the person scans the code. Each change is logged.
-- **Dashboard:** a day's check-ins per area and half day, and who on a shift that day hasn't
-  checked in; the day can be picked.
+- **Live dashboard:** Admin > *Live dashboard* (coordinators only), for a screen at the desk. Big
+  numbers at the top: checked in and volunteers on shift (each split into AM and PM), and who is
+  missing in the shift that runs now or comes next. Below, every shift and area of the day with
+  checked in, assigned and needed and its status (open slots, waiting for check-ins, complete),
+  and who hasn't checked in; the day can be picked. The page updates itself every 15 seconds,
+  pops up each new check-in and throws confetti when an area's shift is complete (needs covered,
+  everyone checked in). It doesn't change while someone moves the mouse or types, only after two
+  minutes without.
+- **Shift overview:** Admin > *Shift overview* (coordinators only), a page of its own for a
+  screen. For a day (picked at the top): volunteers needed, and out of those how many checked in
+  at the desk and how many their lead marked here in the roll call, plus no-shows; below, the same
+  per area for AM and PM, with the shift's lead and who is on each shift. Updates itself every 30
+  seconds, not while someone uses it.
+- **Attendance:** also shows per shift how many of those assigned checked in at the desk and
+  how many their lead marked here in the roll call. Leads aren't listed any more (they count as
+  checked in), also not among the no-shows. Lists of people are in order of status: here in the
+  roll call (the final confirmation), checked in, not checked in, no-show.
+- **Dashboard:** a day's check-ins per area and half day, with who checked in and who didn't.
 - **Leads aren't counted as volunteers:** every number of volunteers (dashboard, `/team`,
   `/roster`, `/gaps`, gap alerts, roll call, replacements, *Swap people*) leaves out the leads,
   supporters of any area, and their slots in Engelsystem's need. Leads are still listed, marked
@@ -20,11 +40,21 @@ admin entering something.
   in one table, one row per area and shift time, one column per day, and saves all changed
   numbers at once, all or nothing. The numbers are volunteers: Engelsystem's need also holds a
   slot for each lead on the shift, which saving adds. Only cells changed on the page are written;
-  shifts that are over and shifts from a schedule can't be changed there. Each change is logged.
+  shifts from a schedule can't be changed there. A number someone else changed since the page
+  was loaded isn't overwritten: nothing is saved and the page asks to reload. Each change is
+  logged.
+- **Standby moves:** Admin > *Standby moves* (coordinators only) shows every shift of a day's AM
+  or PM at once: anyone on an area's shift can be moved to the standby shift of the same half day
+  with one button, and anyone on standby to any area's shift of that half day, picked from a list
+  that shows how full each shift is. A second click confirms each move, which then works like
+  *Swap people*: the person joins the area they move to, and the bot tells them, the leads of
+  both shifts and coordination. Leads aren't listed and can't be moved; no-shows and shifts that
+  are over can't be moved, and shifts that are over aren't offered.
 - **API for dashboards:** read-only JSON under `/telegram/api` (shifts, entries, check-ins,
   people, log), with the check-ins, onboarding, Telegram links, roll call marks and no-shows
   that Engelsystem's API doesn't show. Same API key as Engelsystem's API, sent as a header; needs
-  `api` and `admin_user` (the log also `admin_log`). See the README.
+  `api` and `admin_user` (the log also `admin_log`). A day that isn't a date gets a 400, errors
+  answer in JSON. See the README.
 
 ## 1.2.0 (2026-11-02)
 

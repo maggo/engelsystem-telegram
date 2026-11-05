@@ -19,11 +19,15 @@ class MenuExtension extends AbstractExtension
 {
     /** @var array<string, array{string, string}> translation key => [path, permission] */
     protected const ADMIN_PAGES = [
-        'telegram.dashboard.title' => ['/admin/telegram/dashboard', 'admin_user'],
-        'telegram.checkins.title'  => ['/admin/telegram/checkins', 'admin_user'],
-        'telegram.swap.title'      => ['/admin/telegram/swap', 'admin_user'],
-        'telegram.needs.title'     => ['/admin/telegram/needs', 'admin_user'],
-        'telegram.admin.title'     => ['/admin/telegram', 'admin_user'],
+        'telegram.dashboard.title'  => ['/admin/telegram/dashboard', 'admin_user'],
+        'telegram.live.title'       => ['/admin/telegram/live', 'admin_user'],
+        'telegram.overview.title'   => ['/admin/telegram/overview', 'admin_user'],
+        'telegram.checkins.title'   => ['/admin/telegram/checkins', 'admin_user'],
+        'telegram.attendance.title' => ['/admin/telegram/attendance', 'admin_user'],
+        'telegram.swap.title'       => ['/admin/telegram/swap', 'admin_user'],
+        'telegram.standby.title'    => ['/admin/telegram/standby', 'admin_user'],
+        'telegram.needs.title'      => ['/admin/telegram/needs', 'admin_user'],
+        'telegram.admin.title'      => ['/admin/telegram', 'admin_user'],
     ];
 
     public function __construct(

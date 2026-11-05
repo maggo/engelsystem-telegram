@@ -15,8 +15,7 @@
         <p class="text-muted">
             How many volunteers each shift needs, for every day at once. Change any numbers, then save once.
             Leads aren't counted: Engelsystem's need also keeps a slot for each lead on the shift, saving adds them.
-            Below each number: volunteers on the shift, and leads.
-            Shifts that are over can't be changed.
+            Below each number: volunteers on the shift (red: fewer than needed, green: enough); click it to open the shift in Engelsystem.
         </p>
 
         {% if areas is empty %}
@@ -56,13 +55,14 @@
                                                             <input type="hidden" name="was[{{ cell.shift.id }}][{{ cell.area_id }}]" value="{{ cell.volunteers }}">
                                                         {% else %}
                                                             <span class="fs-6" data-value="{{ cell.volunteers }}"
-                                                                  title="{{ title }}: {{ cell.shift.schedule ? 'from a schedule' : 'over' }}">{{ cell.volunteers }}</span>
+                                                                  title="{{ title }}: from a schedule, its need comes from the schedule">{{ cell.volunteers }}</span>
                                                         {% endif %}
                                                         <a href="{{ url('/shifts', {'action': 'view', 'shift_id': cell.shift.id}) }}"
-                                                           class="d-block small text-muted text-decoration-none" title="Open the shift">
-                                                            {%- set short = cell.filled < cell.volunteers -%}
-                                                            <span class="{{ short ? 'text-danger' : '' }}">{{ cell.filled }} on</span>
-                                                            {%- if cell.leads %} · {{ cell.leads == 1 ? '1 lead' : cell.leads ~ ' leads' }}{% endif -%}
+                                                           class="d-block small text-decoration-none {{ cell.filled < cell.volunteers ? 'text-danger' : 'text-success' }}"
+                                                           data-filled="{{ cell.filled }}"
+                                                           title="Open the shift: {{ title }}">
+                                                            {{- cell.filled }} on
+                                                            <span class="bi bi-box-arrow-up-right" style="font-size: .65em" aria-hidden="true"></span>
                                                         </a>
                                                     </div>
                                                 {% endfor %}

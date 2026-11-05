@@ -17,13 +17,10 @@
         </form>
         <span>
             <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">{{ person.user.displayName }}</a>
-            {%- if person.lead %} <span class="badge bg-info">lead, not counted</span>{% endif %}
-            {%- if person.no_show %} <span class="badge bg-danger">no-show</span>{% endif %}
             <span class="text-muted">
                 {{- person.handle ? ' @' ~ person.handle }}
                 {%- if shifts %} · {{ shifts }}{% endif %}
                 {%- if person.checked_in %} · checked in {{ person.time ? person.time.format('H:i') : 'by hand' }}{% endif %}
-                {%- if person.no_show and person.comment %} · “{{ person.comment }}”{% endif %}
             </span>
         </span>
     </li>
@@ -36,6 +33,7 @@
         <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-3 gap-2">
             <h1 class="mb-0">{{ block('title') }}</h1>
             <span class="text-muted small">
+                <a href="{{ url('/admin/telegram/attendance') }}">{{ __('telegram.attendance.title') }}</a> ·
                 <a href="{{ url('/admin/telegram/dashboard') }}">{{ __('telegram.dashboard.title') }}</a>
             </span>
         </div>
@@ -44,136 +42,47 @@
         {% if days is empty %}
             <p class="text-muted mb-5">There are no shifts yet, so there are no days to check in for.</p>
         {% else %}
-            {# Per shift of the day #}
             {% set day_value = day.toDateString() %}
-            <form method="get" action="{{ url('/admin/telegram/checkins') }}" class="row g-2 align-items-center mb-3">
-                <div class="col-auto">
-                    <label class="col-form-label" for="checkins-day">Day</label>
-                </div>
-                <div class="col-auto">
-                    <select class="form-select" name="day" id="checkins-day">
-                        {% for value, label in days %}
-                            <option value="{{ value }}"{% if value == day_value %} selected{% endif %}>
-                                {{ label }}{% if value == now.toDateString() %} (today){% endif %}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-secondary" id="checkins-day-button">Show</button>
-                </div>
-            </form>
+            {% include 'telegram/day-picker.twig' with {'path': '/admin/telegram/checkins'} %}
 
-            {# Who to look for: everyone on a shift that day not checked in, and the no-shows #}
-            <div class="d-flex flex-wrap gap-2 mb-2">
-                <button type="button" class="btn {{ missing is empty ? 'btn-outline-success' : 'btn-outline-danger' }}"
-                        data-bs-toggle="collapse" data-bs-target="#open-missing"
-                        aria-expanded="{{ open == 'missing' ? 'true' : 'false' }}" aria-controls="open-missing">
-                    Not checked in ({{ missing|length }})
-                </button>
-                <button type="button" class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#open-no-shows"
-                        aria-expanded="{{ open == 'no-shows' ? 'true' : 'false' }}" aria-controls="open-no-shows">
-                    No-shows ({{ no_shows|length }})
-                </button>
-            </div>
-            <div class="collapse{{ open == 'missing' ? ' show' }}" id="open-missing">
-                <div class="card card-body mb-3">
-                    {% if missing is empty %}
-                        <p class="text-success mb-0">Every volunteer on a shift that day checked in.</p>
-                    {% else %}
-                        <p class="small text-muted">Volunteers on a shift that day who haven't checked in; leads and no-shows aren't listed.</p>
-                        <ul class="list-unstyled small mb-0">
-                            {% for person in missing %}
-                                {{ _self.person(person, day_value, 'missing', person.shifts|join(', ')) }}
-                            {% endfor %}
-                        </ul>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="collapse{{ open == 'no-shows' ? ' show' }}" id="open-no-shows">
-                <div class="card card-body mb-3">
-                    {% if no_shows is empty %}
-                        <p class="text-muted mb-0">No no-shows that day.</p>
-                    {% else %}
-                        <p class="small text-muted">Marked as no-show on their shift (Engelsystem's "freeloaded"), leads too.</p>
-                        <ul class="list-unstyled small mb-0">
-                            {% for person in no_shows %}
-                                {{ _self.person(person, day_value, 'no-shows', person.shift) }}
-                            {% endfor %}
-                        </ul>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="table-responsive mb-2">
-                <table class="table table-sm align-middle">
-                    <thead>
-                        <tr>
-                            <th>Shift</th><th>Area</th>
-                            <th class="text-end">Checked in</th><th class="text-end">Assigned</th><th class="text-end">Needed</th>
-                            <th class="text-end">No-shows</th><th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in shifts %}
-                            <tr id="open-{{ row.id }}"{% if row.over %} class="text-muted"{% endif %}>
-                                <td>
-                                    <a href="{{ url('/shifts', {'action': 'view', 'shift_id': row.shift.id}) }}">
-                                        {{ row.shift.start.format('H:i') }}–{{ row.shift.end.format('H:i') }}
-                                    </a>
-                                    <span class="small text-muted">{{ row.shift.title }}</span>
-                                    {% if row.over %}<span class="badge bg-secondary">over</span>{% endif %}
-                                </td>
-                                <td>{{ row.angel_type.name }}</td>
-                                <td class="text-end fw-bold {{ row.missing ? 'text-danger' : (row.filled ? 'text-success') }}">
-                                    {{ row.checked_in }}
-                                </td>
-                                <td class="text-end">{{ row.filled }}</td>
-                                <td class="text-end {{ row.filled < row.needed ? 'text-warning fw-bold' }}">{{ row.needed }}</td>
-                                <td class="text-end">{{ row.no_shows ?: '' }}</td>
-                                <td class="text-end">
-                                    {% if row.groups is not empty %}
-                                        <button type="button" class="btn btn-sm btn-link py-0" data-bs-toggle="collapse"
-                                                data-bs-target="#people-{{ row.id }}" aria-expanded="{{ row.id == open ? 'true' : 'false' }}"
-                                                aria-controls="people-{{ row.id }}">people</button>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% if row.groups is not empty %}
-                                <tr class="collapse{{ row.id == open ? ' show' }}" id="people-{{ row.id }}">
-                                    <td colspan="7" class="ps-4">
-                                        {% for group, people in row.groups %}
-                                            <div class="small fw-bold mt-1">{{ group }} ({{ people|length }})</div>
-                                            <ul class="list-unstyled small mb-1">
-                                                {% for person in people %}
-                                                    {{ _self.person(person, day_value, row.id) }}
-                                                {% endfor %}
-                                            </ul>
-                                        {% endfor %}
-                                    </td>
-                                </tr>
-                            {% endif %}
-                        {% endfor %}
-                    </tbody>
-                    {% if shifts is not empty %}
-                        <tfoot>
-                            <tr class="fw-bold">
-                                <td colspan="2">All shifts</td>
-                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.checked_in, 0) }}</td>
-                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.filled, 0) }}</td>
-                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.needed, 0) }}</td>
-                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.no_shows, 0) ?: '' }}</td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                    {% endif %}
-                </table>
-            </div>
-            <p class="small text-muted mb-5">
-                Volunteers only, leads are listed but not counted · checked in: scanned the day's QR code at the
-                check-in desk, or checked in here · assigned: on the shift, without no-shows · someone on two shifts
-                that day counts on both · <b>people</b> lists everyone on the shift, to check them in by hand
+            <p>
+                <b>{{ checked_in|length }}</b> of {{ expected }} volunteers with a shift checked in ·
+                <b>{{ missing|length }}</b> not checked in{% if without_shift %} ·
+                {{ without_shift }} checked in without a shift that day{% endif %}
+                <br><span class="small text-muted">
+                    Checked in: scanned the day's QR code at the check-in desk, or checked in here ·
+                    leads aren't counted · someone marked no-show on all their shifts isn't expected ·
+                    no-shows per shift are on <a href="{{ url('/admin/telegram/attendance', {'day': day_value}) }}">{{ __('telegram.attendance.title') }}</a>
+                </span>
             </p>
+
+            <h2 class="h4" id="open-missing">Not checked in ({{ missing|length }})</h2>
+            {% if missing is empty %}
+                <p class="text-success mb-4">Every volunteer with a shift that day checked in.</p>
+            {% else %}
+                <ul class="list-unstyled small mb-4">
+                    {% for person in missing %}
+                        {{ _self.person(person, day_value, 'missing', person.shifts|join(', ')) }}
+                    {% endfor %}
+                </ul>
+            {% endif %}
+
+            <button type="button" class="btn btn-outline-secondary mb-2" data-bs-toggle="collapse" data-bs-target="#open-checked-in"
+                    aria-expanded="{{ open == 'checked-in' ? 'true' : 'false' }}" aria-controls="open-checked-in">
+                Checked in ({{ checked_in|length }})
+            </button>
+            <div class="collapse{{ open == 'checked-in' ? ' show' }}" id="open-checked-in">
+                {% if checked_in is empty %}
+                    <p class="text-muted">Nobody with a shift checked in yet.</p>
+                {% else %}
+                    <ul class="list-unstyled small">
+                        {% for person in checked_in %}
+                            {{ _self.person(person, day_value, 'checked-in', person.shifts|join(', ')) }}
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+            <div class="mb-5"></div>
 
             {# By hand, for any day #}
             <h2 class="h4" id="find">Find someone</h2>

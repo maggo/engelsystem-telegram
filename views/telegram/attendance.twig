@@ -1,0 +1,133 @@
+{% extends 'layouts/app.twig' %}
+
+{% block title %}{{ __('telegram.attendance.title') }}{% endblock %}
+
+{% block content %}
+    <div class="container">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-3 gap-2">
+            <h1 class="mb-0">{{ block('title') }}</h1>
+            <span class="text-muted small">
+                <a href="{{ url('/admin/telegram/checkins') }}">{{ __('telegram.checkins.title') }}</a> ·
+                <a href="{{ url('/admin/telegram/dashboard') }}">{{ __('telegram.dashboard.title') }}</a>
+            </span>
+        </div>
+
+        {% if days is empty %}
+            <p class="text-muted mb-5">There are no shifts yet.</p>
+        {% else %}
+            {% include 'telegram/day-picker.twig' with {'path': '/admin/telegram/attendance'} %}
+
+            <button type="button" class="btn {{ no_shows is empty ? 'btn-outline-success' : 'btn-outline-danger' }} mb-2"
+                    data-bs-toggle="collapse" data-bs-target="#no-shows" aria-expanded="false" aria-controls="no-shows">
+                No-shows ({{ no_shows|length }})
+            </button>
+            <div class="collapse" id="no-shows">
+                <div class="card card-body mb-3">
+                    {% if no_shows is empty %}
+                        <p class="text-success mb-0">No no-shows that day.</p>
+                    {% else %}
+                        <ul class="list-unstyled small mb-0">
+                            {% for person in no_shows %}
+                                <li class="py-1">{{ _self.person(person, true) }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="table-responsive mb-2">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Shift</th><th>Area</th>
+                            <th class="text-end">Needed</th><th class="text-end">Assigned</th>
+                            <th class="text-end">Checked in</th><th class="text-end">Here</th><th class="text-end">No-shows</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in shifts %}
+                            <tr{% if row.over %} class="text-muted"{% endif %}>
+                                <td>
+                                    <a href="{{ url('/shifts', {'action': 'view', 'shift_id': row.shift.id}) }}">
+                                        {{ row.shift.start.format('H:i') }}–{{ row.shift.end.format('H:i') }}
+                                    </a>
+                                    <span class="small text-muted">{{ row.shift.title }}</span>
+                                    {% if row.over %}<span class="badge bg-secondary">over</span>{% endif %}
+                                </td>
+                                <td>{{ row.angel_type.name }}</td>
+                                <td class="text-end">{{ row.needed }}</td>
+                                <td class="text-end {{ row.filled < row.needed ? 'text-warning fw-bold' }}">{{ row.filled }}</td>
+                                <td class="text-end">{{ row.checked_in }}</td>
+                                <td class="text-end">{{ row.here }}</td>
+                                <td class="text-end {{ row.no_shows ? 'text-danger fw-bold' }}">{{ row.no_shows ?: '' }}</td>
+                                <td class="text-end">
+                                    {% if row.people|filter(p => not p.lead) is not empty %}
+                                        <button type="button" class="btn btn-sm btn-link py-0" data-bs-toggle="collapse"
+                                                data-bs-target="#people-{{ row.id }}" aria-expanded="false"
+                                                aria-controls="people-{{ row.id }}">people</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% if row.people|filter(p => not p.lead) is not empty %}
+                                <tr class="collapse" id="people-{{ row.id }}">
+                                    <td colspan="8" class="ps-4">
+                                        {% for group, people in {
+                                            'On the shift': row.people|filter(p => not p.lead and not p.no_show),
+                                            'No-shows': row.people|filter(p => not p.lead and p.no_show),
+                                        } %}
+                                            {% if people is not empty %}
+                                                <div class="small fw-bold mt-1">{{ group }} ({{ people|length }})</div>
+                                                <ul class="list-unstyled small mb-1">
+                                                    {% for person in people %}
+                                                        <li class="py-1">{{ _self.person(person, false) }}</li>
+                                                    {% endfor %}
+                                                </ul>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                    {% if shifts is not empty %}
+                        <tfoot>
+                            <tr class="fw-bold">
+                                <td colspan="2">All shifts</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.needed, 0) }}</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.filled, 0) }}</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.checked_in, 0) }}</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.here, 0) }}</td>
+                                <td class="text-end">{{ shifts|reduce((sum, row) => sum + row.no_shows, 0) ?: '' }}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+            <p class="small text-muted mb-5">
+                Volunteers only, leads are neither counted nor listed · assigned: on the shift, without no-shows, as in
+                Engelsystem · checked in: of those assigned, scanned the day's code at the desk or checked in by
+                hand on <a href="{{ url('/admin/telegram/checkins', {'day': day.toDateString()}) }}">{{ __('telegram.checkins.title') }}</a> ·
+                here: of those assigned, marked here by the lead in the roll call · no-shows are marked on the
+                shift in Engelsystem or by the lead's roll call
+            </p>
+        {% endif %}
+    </div>
+
+    <script src="{{ url('/admin/telegram/checkins.js') }}"></script>
+{% endblock %}
+
+{# A person on a shift, with the shift when listed for the whole day #}
+{% macro person(person, with_shift) %}
+    <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">{{ person.user.displayName }}</a>
+    {%- if person.no_show %} <span class="badge bg-danger">no-show</span>
+    {%- elseif person.here %} <span class="badge bg-success">here</span>{% if not person.checked_in %} <span class="text-muted">not checked in at the desk</span>{% endif %}
+    {%- elseif person.checked_in %} <span class="badge bg-primary">checked in</span>
+    {%- else %} <span class="badge bg-secondary">not checked in</span>{% endif %}
+    <span class="text-muted">
+        {{- person.handle ? ' @' ~ person.handle }}
+        {%- if with_shift %} · {{ person.shift }}{% endif %}
+        {%- if person.no_show and person.comment %} · “{{ person.comment }}”{% endif %}
+    </span>
+{% endmacro %}

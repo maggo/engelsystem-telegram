@@ -1,0 +1,155 @@
+{% extends 'layouts/app.twig' %}
+
+{% block title %}{{ __('telegram.live.title') }}{% endblock %}
+
+{% block content %}
+    {% set today = now.toDateString() %}
+    {% set upcoming = day.toDateString() > today %}
+    {% set people = tiles.people %}
+    {% set checked = tiles.checked_in %}
+    {% set missing_tile = tiles.missing %}
+
+    <div class="container" id="live" data-live="{{ live|json_encode }}">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
+            <h1 class="mb-0">{{ block('title') }} <small class="text-body-secondary">{{ day.format('D, M j') }}</small></h1>
+            <span class="small text-body-secondary" id="live-status" data-time="{{ now.format('H:i') }}">Updated {{ now.format('H:i') }}</span>
+        </div>
+
+        {% if days|length > 1 %}
+            <ul class="nav nav-pills mb-4">
+                {% for value, label in days %}
+                    <li class="nav-item">
+                        <a class="nav-link py-1{{ value == day.toDateString() ? ' active' }}"
+                           href="{{ url('/admin/telegram/live', {'day': value}) }}">{{ label }}{{ value == today ? ' (today)' }}</a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="card h-100"><div class="card-body">
+                    <div class="text-body-secondary">Checked in</div>
+                    <div class="display-5 fw-semibold" data-tile="checked_in">{{ upcoming ? '–' : checked.total }}</div>
+                    <div class="text-body-secondary">
+                        AM {{ upcoming ? '–' : checked.AM ?? '–' }} · PM {{ upcoming ? '–' : checked.PM ?? '–' }}
+                    </div>
+                </div></div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100"><div class="card-body">
+                    <div class="text-body-secondary">Volunteers on shift</div>
+                    <div class="display-5 fw-semibold" data-tile="people">{{ people.total }}</div>
+                    <div class="text-body-secondary">AM {{ people.AM ?? '–' }} · PM {{ people.PM ?? '–' }}</div>
+                </div></div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100"><div class="card-body">
+                    <div class="text-body-secondary">{{ missing_tile.label }}</div>
+                    <div class="display-5 fw-semibold {{ missing_tile.value ? 'text-danger' : (missing_tile.value is null ? '' : 'text-success') }}" data-tile="missing">
+                        {{ missing_tile.value ?? '–' }}
+                    </div>
+                    <div class="text-body-secondary">{{ missing_tile.detail }}</div>
+                </div></div>
+            </div>
+        </div>
+
+        {% if halves is empty %}
+            <p class="text-body-secondary">No shifts on this day.</p>
+        {% endif %}
+        {% for half in halves %}
+            {% set open = half.rows|reduce((sum, row) => sum + row.open, 0) %}
+            <h2 class="h5 mb-2">
+                {{ half.name }} <span class="text-body-secondary fw-normal">{{ half.time }}</span>
+                <small class="text-body-secondary fw-normal ms-2">
+                    {% if not upcoming %}{{ half.checked_in }}/{{ half.people }} checked in{% endif %}
+                    {%- if open %}{{ not upcoming ? ' · ' }}<span class="text-danger">{{ open }} open</span>{% endif %}
+                </small>
+            </h2>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm align-middle" style="table-layout: fixed; min-width: 640px">
+                    <thead>
+                        <tr>
+                            <th>Area</th>
+                            <th class="text-end" style="width: 100px">Checked in</th>
+                            <th class="text-end" style="width: 100px">Assigned</th>
+                            <th class="text-end" style="width: 100px">Needed</th>
+                            <th style="width: 22%"></th>
+                            <th style="width: 130px">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in half.rows %}
+                            {% set time = row.shift.start.format('H:i') ~ '–' ~ row.shift.end.format('H:i') %}
+                            {% set scale = max(row.needed, row.filled, 1) %}
+                            {% set waiting = row.filled - row.checked_in %}
+                            <tr class="{{ row.over ? 'text-body-secondary' }}">
+                                <td>
+                                    <a href="{{ url('/shifts', {'action': 'view', 'shift_id': row.shift.id}) }}">{{ row.angel_type.name }}</a>
+                                    {% if time != half.time %}<span class="small text-body-secondary">{{ time }}</span>{% endif %}
+                                    {% if not upcoming and row.missing is not empty %}
+                                        <details class="small" data-key="missing-{{ row.key }}">
+                                            <summary class="text-body-secondary">{{ row.missing|length }} not checked in</summary>
+                                            {% for person in row.missing %}
+                                                <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">{{ person.user.displayName }}</a>
+                                                {%- if person.handle %} <span class="text-body-secondary">@{{ person.handle }}</span>{% endif %}
+                                                {%- if person.here %} <span class="text-success">(here per roll call)</span>{% endif %}
+                                                {{- not loop.last ? ',' }}
+                                            {% endfor %}
+                                        </details>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">{{ upcoming ? '–' : row.checked_in }}</td>
+                                <td class="text-end">{{ row.filled }}</td>
+                                <td class="text-end">{{ row.standby ? '–' : row.needed }}</td>
+                                <td>
+                                    <div class="progress-stacked" style="height: 8px">
+                                        {% for part, value in {'success': upcoming ? 0 : row.checked_in, 'warning': upcoming ? row.filled : waiting, 'danger': row.open} %}
+                                            {% if value %}
+                                                <div class="progress" role="progressbar" style="width: {{ (value / scale * 100)|round(1) }}%">
+                                                    <div class="progress-bar bg-{{ part }}"></div>
+                                                </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if row.over %}<span class="badge text-bg-secondary">Over</span>
+                                    {% elseif row.status == 'complete' %}<span class="badge text-bg-success">Complete</span>
+                                    {% elseif row.status == 'open' %}<span class="badge text-bg-danger">{{ row.open }} open</span>
+                                    {% elseif row.status == 'waiting' %}<span class="badge text-bg-warning">{{ waiting }} to check in</span>
+                                    {% else %}<span class="badge text-bg-secondary">{{ row.standby ? 'Standby' : 'Covered' }}</span>{% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endfor %}
+
+        {% if missing is not null and missing is not empty %}
+            <h2 class="h5 mb-2" id="missing">Not checked in <small class="text-body-secondary fw-normal">{{ missing|length }}</small></h2>
+            <div class="table-responsive mb-5">
+                <table class="table table-sm align-middle">
+                    <tbody>
+                        {% for person in missing %}
+                            <tr>
+                                <td>
+                                    <a href="{{ url('/users', {'action': 'view', 'user_id': person.user.id}) }}">{{ person.user.displayName }}</a>
+                                    {%- if person.here %} <span class="small text-success">(here per roll call)</span>{% endif %}
+                                </td>
+                                <td class="small text-body-secondary">{{ person.handle ? '@' ~ person.handle : '' }}</td>
+                                <td class="small">{{ person.shifts|join(', ') }}</td>
+                                <td class="small text-end">
+                                    <a href="{{ url('/admin/telegram/checkins', {'user': person.user.id, 'day': day.toDateString()}) }}#find">check in by hand</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+
+    <script src="{{ url('/admin/telegram/live.js') }}"></script>
+{% endblock %}

@@ -39,18 +39,7 @@ class Swap
      */
     public static function data(?string $day, ?string $half, ?string $left, ?string $right): array
     {
-        $now = Carbon::now();
-        $days = Shift::query()
-            ->where('end', '>', $now)
-            ->selectRaw('DATE(start) AS day')
-            ->distinct()
-            ->orderBy('day')
-            ->pluck('day')
-            ->mapWithKeys(fn(string $value) => [$value => Carbon::parse($value)->format('D M j')]);
-        if (!$days->has($day)) {
-            $day = $days->has($now->toDateString()) ? $now->toDateString() : $days->keys()->first();
-        }
-        $half = in_array($half, ['AM', 'PM']) ? $half : ($now->hour < 12 ? 'AM' : 'PM');
+        ['days' => $days, 'day' => $day, 'half' => $half] = self::halfDay($day, $half);
 
         $sides = $day ? self::sides(Carbon::parse($day), $half) : new Collection();
         $standby = Roster::standbyArea()?->id;
@@ -61,7 +50,7 @@ class Swap
             ?? $sides->first(fn(array $side) => $side['key'] !== $left)['key'] ?? null;
 
         return [
-            'days'      => $days->all(),
+            'days'      => $days,
             'day'       => $day,
             'half'      => $half,
             'sides'     => $sides->mapWithKeys(fn(array $side) => [$side['key'] => $side['label']])->all(),
@@ -327,11 +316,35 @@ class Swap
     }
 
     /**
+     * The days with shifts to come, and the picked day and half day: today and now's half by
+     * default, or the first day to come
+     *
+     * @return array{days: array<string, string>, day: ?string, half: string}
+     */
+    public static function halfDay(?string $day, ?string $half): array
+    {
+        $now = Carbon::now();
+        $days = Shift::query()
+            ->where('end', '>', $now)
+            ->selectRaw('DATE(start) AS day')
+            ->distinct()
+            ->orderBy('day')
+            ->pluck('day')
+            ->mapWithKeys(fn(string $value) => [$value => Carbon::parse($value)->format('D M j')]);
+        if (!$days->has($day)) {
+            $day = $days->has($now->toDateString()) ? $now->toDateString() : $days->keys()->first();
+        }
+        $half = in_array($half, ['AM', 'PM']) ? $half : ($now->hour < 12 ? 'AM' : 'PM');
+
+        return ['days' => $days->all(), 'day' => $day, 'half' => $half];
+    }
+
+    /**
      * Every shift and area of the half day, by area
      *
      * @return Collection<string, array{key: string, label: string, shift: Shift, area: AngelType}>
      */
-    protected static function sides(Carbon $day, string $half): Collection
+    public static function sides(Carbon $day, string $half): Collection
     {
         $areas = AngelType::query()->get()->keyBy('id');
 
@@ -372,7 +385,7 @@ class Swap
     /**
      * @return array{Shift, AngelType}
      */
-    protected static function side(string $key): array
+    public static function side(string $key): array
     {
         [$shiftId, $areaId] = array_map('intval', explode('-', $key . '-'));
         $shift = Shift::query()->find($shiftId);
@@ -391,7 +404,7 @@ class Swap
     /**
      * The side's people: leads first, then by name, no-shows last (they stay where they are)
      */
-    protected static function people(array $side, bool $today): array
+    public static function people(array $side, bool $today): array
     {
         /** @var Shift $shift */
         $shift = $side['shift'];

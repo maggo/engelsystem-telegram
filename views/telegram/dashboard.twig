@@ -8,6 +8,7 @@
             <h1 class="mb-0">{{ block('title') }}</h1>
             <span class="text-muted small">
                 {{ now.format('D, M j H:i') }} · refreshes every minute ·
+                <a href="{{ url('/admin/telegram/live') }}">{{ __('telegram.live.title') }}</a> ·
                 <a href="{{ url('/admin/telegram') }}">{{ __('telegram.admin.title') }}</a>
             </span>
         </div>
@@ -103,11 +104,12 @@
                     <summary>{{ area.name }}: {{ area.total.checked_in }} checked in</summary>
                     <ul class="list-unstyled small mt-2 mb-3">
                         {% for half, people in area.in %}
-                            <li>
-                                <b>{{ half }}</b> ({{ people|length }}):
-                                {% for user in people %}{{ user.displayName }}
-                                    {%- set time = checkins.times.get(user.id) %} <span class="text-muted">{{ time ? time.format('H:i') : 'by hand' }}</span>
-                                    {{- not loop.last ? ', ' }}{% endfor %}
+                            <li{% if not loop.last %} class="mb-2"{% endif %}>
+                                <b>{{ half }}</b> ({{ people|length }})
+                                {% for user in people %}
+                                    {%- set time = checkins.times.get(user.id) %}
+                                    <br><a href="{{ url('/users', {'action': 'view', 'user_id': user.id}) }}">{{ user.displayName }}</a> <span class="text-muted">{{ time ? time.format('H:i') : 'by hand' }}</span>
+                                {% endfor %}
                             </li>
                         {% endfor %}
                     </ul>

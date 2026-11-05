@@ -1,4 +1,4 @@
-// The needs table: changed numbers stand out, the totals follow, and the button says how many changed
+// The needs table: changed numbers stand out, the totals and colours follow, and the button says how many changed
 (function () {
     var form = document.getElementById('needs-form');
     if (!form) {
@@ -20,6 +20,14 @@
             input.classList.toggle('border-warning', isChanged);
             input.classList.toggle('bg-warning-subtle', isChanged);
             changed += isChanged ? 1 : 0;
+
+            // Red while fewer volunteers are on the shift than the number typed, green when enough
+            var link = input.parentNode.querySelector('a[data-filled]');
+            if (link) {
+                var short = number(link.dataset.filled) < number(input.value);
+                link.classList.toggle('text-danger', short);
+                link.classList.toggle('text-success', !short);
+            }
         });
 
         form.querySelectorAll('[data-total]').forEach(function (cell) {

@@ -1,0 +1,18 @@
+{# The day to show, today by default; picking another one reloads the page, see checkins.js #}
+<form method="get" action="{{ url(path) }}" class="row g-2 align-items-center mb-3">
+    <div class="col-auto">
+        <label class="col-form-label" for="day-picker">Day</label>
+    </div>
+    <div class="col-auto">
+        <select class="form-select" name="day" id="day-picker">
+            {% for value, label in days %}
+                <option value="{{ value }}"{% if value == day.toDateString() %} selected{% endif %}>
+                    {{ label }}{% if value == now.toDateString() %} (today){% endif %}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-secondary" id="day-picker-button">Show</button>
+    </div>
+</form>

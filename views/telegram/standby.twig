@@ -1,0 +1,172 @@
+{% extends 'layouts/app.twig' %}
+
+{% block title %}{{ __('telegram.standby.title') }}{% endblock %}
+
+{% macro person(person) %}
+    {{ person.name }}
+    {% if person.handle and person.handle|lower != person.name|lower %}
+        <span class="text-muted">@{{ person.handle }}</span>
+    {% endif %}
+    {% if person.checked_in %}📍{% endif %}
+    {% if person.no_show %}<span class="badge bg-danger">no-show</span>{% endif %}
+    {% if not person.onboarded %}<span class="badge bg-warning text-dark">not onboarded</span>{% endif %}
+    {% if not person.telegram %}<span class="small text-muted">· not on Telegram</span>{% endif %}
+{% endmacro %}
+
+{% macro heading(column, tag) %}
+    <{{ tag }} class="h6 mb-0">{{ column.name }}</{{ tag }}>
+    <div class="small text-muted">
+        {{ column.time }} · {{ column.filled }}/{{ column.needed }}
+        {% if column.filled < column.needed %}<span class="badge bg-danger">{{ column.needed - column.filled }} open</span>{% endif %}
+        {% if column.over %}<span class="badge bg-secondary">over</span>{% endif %}
+        {% if column.lead_names %}· lead: {{ column.lead_names|join(', ') }}{% endif %}
+    </div>
+{% endmacro %}
+
+{% block content %}
+    {% import _self as board %}
+    <style>
+        {# Engelsystem's Choices.js box takes the room left next to the Move button #}
+        [data-move] .choices { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+        [data-move] .choices__inner { min-height: 0; }
+    </style>
+    <div class="container-fluid">
+        <div class="d-flex flex-wrap justify-content-between align-items-baseline mb-3 gap-2">
+            <h1 class="mb-0">{{ block('title') }}</h1>
+            <span class="text-muted small">
+                <a href="{{ url('/admin/telegram/swap') }}">{{ __('telegram.swap.title') }}</a>
+            </span>
+        </div>
+        {% include 'layouts/parts/messages.twig' %}
+
+        <p class="text-muted">
+            Every shift of a half day: move anyone on an area's shift to the standby of the same half day,
+            or anyone on standby to any area's shift. They join the area they move to, and the bot tells them,
+            the leads of both shifts and coordination. Leads aren't listed, no-shows stay where they are.
+        </p>
+
+        {% if not standby_area %}
+            <div class="alert alert-warning">
+                {% if standby_name %}
+                    No area is called "{{ standby_name }}", the standby area in Settings &gt; Telegram.
+                {% else %}
+                    No standby area is set in Settings &gt; Telegram.
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {% if not days %}
+            <div class="alert alert-info">No shifts to come.</div>
+        {% else %}
+            <form method="get" action="{{ url('/admin/telegram/standby') }}" id="standby-pick" class="row g-2 align-items-end mb-3">
+                <div class="col-auto">
+                    <label class="form-label" for="standby-day">Day</label>
+                    <select class="form-select" name="day" id="standby-day">
+                        {% for value, label in days %}
+                            <option value="{{ value }}" {{ value == day ? 'selected' }}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <div class="btn-group" role="group" aria-label="Half day">
+                        {% for option in ['AM', 'PM'] %}
+                            <input type="radio" class="btn-check" name="half" value="{{ option }}" id="standby-{{ option }}" {{ option == half ? 'checked' }}>
+                            <label class="btn btn-outline-primary" for="standby-{{ option }}">{{ option }}</label>
+                        {% endfor %}
+                    </div>
+                </div>
+                <noscript>
+                    <div class="col-auto"><button type="submit" class="btn btn-secondary">Show</button></div>
+                </noscript>
+                <div class="col-sm-4 col-lg-3 ms-sm-auto">
+                    <input type="search" class="form-control" id="standby-search" placeholder="Search by name or handle" aria-label="Search people">
+                </div>
+            </form>
+
+            {% if not standby and not areas %}
+                <div class="alert alert-info">No shifts in this half day.</div>
+            {% else %}
+                <form method="post" action="{{ url('/admin/telegram/standby/move') }}" id="standby-form">
+                    {{ csrf() }}
+                    <input type="hidden" name="day" value="{{ day }}">
+                    <input type="hidden" name="half" value="{{ half }}">
+
+                    <div class="row g-4">
+                        <div class="col-lg-4">
+                            {% for column in standby %}
+                                <div class="card mb-3 border-primary">
+                                    <div class="card-header">{{ board.heading(column, 'h2') }}</div>
+                                    <ul class="list-group list-group-flush">
+                                        {% for person in column.people %}
+                                            <li class="list-group-item {{ person.no_show ? 'text-muted' }}" data-person>
+                                                <div>{{ board.person(person) }}</div>
+                                                {% if not person.no_show and not column.over and to_area %}
+                                                    <div class="input-group input-group-sm flex-nowrap mt-1" data-move>
+                                                        <select class="form-select" name="to[{{ person.id }}]" aria-label="Where {{ person.name }} goes">
+                                                            <option value="">Move to…</option>
+                                                            {% for key, label in to_area %}
+                                                                <option value="{{ key }}">{{ label }}</option>
+                                                            {% endfor %}
+                                                        </select>
+                                                        <button type="submit" class="btn btn-primary" name="entry" value="{{ person.id }}"
+                                                                data-name="{{ person.name }}">Move</button>
+                                                    </div>
+                                                {% endif %}
+                                            </li>
+                                        {% else %}
+                                            <li class="list-group-item text-muted">Nobody on standby.</li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            {% else %}
+                                <div class="alert alert-info">No standby shift in this half day.</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-lg-8">
+                            <div class="row row-cols-1 row-cols-md-2 g-3">
+                                {% for column in areas %}
+                                    <div class="col">
+                                        <div class="card h-100">
+                                            <div class="card-header">{{ board.heading(column, 'h3') }}</div>
+                                            <ul class="list-group list-group-flush">
+                                                {% for person in column.people %}
+                                                    <li class="list-group-item d-flex flex-wrap gap-2 align-items-center {{ person.no_show ? 'text-muted' }}" data-person>
+                                                        <div class="flex-grow-1">{{ board.person(person) }}</div>
+                                                        {% if not person.no_show and not column.over and to_standby %}
+                                                            {% if to_standby|length == 1 %}
+                                                                <input type="hidden" name="to[{{ person.id }}]" value="{{ to_standby|keys|first }}">
+                                                                <button type="submit" class="btn btn-sm btn-outline-primary" name="entry" value="{{ person.id }}"
+                                                                        data-name="{{ person.name }}" data-to="{{ to_standby|first }}">→ Standby</button>
+                                                            {% else %}
+                                                                <div class="input-group input-group-sm flex-nowrap w-auto" data-move>
+                                                                    <select class="form-select" name="to[{{ person.id }}]" aria-label="Which standby {{ person.name }} goes to">
+                                                                        <option value="">Standby…</option>
+                                                                        {% for key, label in to_standby %}
+                                                                            <option value="{{ key }}">{{ label }}</option>
+                                                                        {% endfor %}
+                                                                    </select>
+                                                                    <button type="submit" class="btn btn-outline-primary" name="entry" value="{{ person.id }}"
+                                                                            data-name="{{ person.name }}">Move</button>
+                                                                </div>
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    </li>
+                                                {% else %}
+                                                    <li class="list-group-item text-muted">Nobody on this shift.</li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <p class="small text-muted mt-3">📍 checked in today. Numbers are volunteers/needed, leads not counted.</p>
+                </form>
+            {% endif %}
+        {% endif %}
+    </div>
+
+    <script src="{{ url('/admin/telegram/standby.js') }}"></script>
+{% endblock %}

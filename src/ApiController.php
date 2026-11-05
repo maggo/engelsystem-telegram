@@ -9,6 +9,7 @@ use Engelsystem\Http\Request;
 use Engelsystem\Http\Response;
 use Engelsystem\Models\User\User;
 use Illuminate\Support\Str;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Session\Storage\NativeSessionStorage;
 use Symfony\Component\HttpFoundation\Session\Storage\SessionStorageInterface;
 
@@ -22,7 +23,8 @@ class ApiController
 {
     public function __construct(
         protected Response $response,
-        protected SessionStorageInterface $session
+        protected SessionStorageInterface $session,
+        protected LoggerInterface $log
     ) {
     }
 
@@ -52,7 +54,8 @@ class ApiController
     public function log(Request $request): Response
     {
         return $this->respond($request, ['admin_user', 'admin_log'], function () use ($request): array|string {
-            $since = (string) $request->get('since', '');
+            $since = $request->get('since', '');
+            $since = is_scalar($since) ? (string) $since : 'invalid';
             try {
                 // The database holds local times, a time with another offset has to be converted
                 $since = $since === '' ? null : Carbon::parse($since)->setTimezone(date_default_timezone_get());
@@ -60,7 +63,9 @@ class ApiController
                 return 'since must be a date and time, e.g. 2026-11-03T08:00:00+05:30';
             }
 
-            return Export::log(max(0, (int) $request->get('after', 0)), $since);
+            $after = $request->get('after', 0);
+
+            return Export::log(is_scalar($after) ? max(0, (int) $after) : 0, $since);
         });
     }
 
@@ -92,12 +97,22 @@ class ApiController
             return $this->json(['message' => 'Forbidden'], 403);
         }
 
-        $day = (string) $request->get('day', '');
-        if ($day !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
+        $day = $request->get('day', '');
+        $day = is_scalar($day) ? (string) $day : 'invalid';
+        if (
+            $day !== ''
+            && (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $day, $date) || !checkdate((int) $date[2], (int) $date[3], (int) $date[1]))
+        ) {
             return $this->json(['message' => 'day must be a date like 2026-11-03'], 400);
         }
 
-        $result = $data($day === '' ? null : $day);
+        try {
+            $result = $data($day === '' ? null : $day);
+        } catch (\Throwable $e) {
+            // JSON for a dashboard, as Engelsystem's own API answers errors
+            $this->log->error('Telegram API: ' . $e->getMessage(), ['exception' => $e]);
+            return $this->json(['message' => 'Internal error'], 500);
+        }
 
         return is_string($result) ? $this->json(['message' => $result], 400) : $this->json($result);
     }

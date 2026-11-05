@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+{# A day's shifts at a glance, a page of its own for a screen; see Overview #}
+{% set today = now.toDateString() %}
+{% set past = day.toDateString() < today %}
+{% set t = totals %}
+{# Real name, then the username; the Telegram handle only where it differs #}
+{% macro who(user, handle, link = true) %}
+    {%- set name = (user.personalData.first_name ~ ' ' ~ user.personalData.last_name)|trim -%}
+    {%- if link %}<a href="{{ url('/users', {'action': 'view', 'user_id': user.id}) }}">{{ name ?: user.name }}</a>{% else %}{{ name ?: user.name }}{% endif -%}
+    {%- if name %} <span class="handle">{{ user.name }}</span>{% endif -%}
+    {%- if handle and handle != user.name %} <span class="handle">@{{ handle }}</span>{% endif -%}
+{% endmacro %}
+{% macro pct(value, of) %}{{ of > 0 ? min(100, (value / of * 100)|round) : 0 }}{% endmacro %}
+{% macro count(value, of, tone, show_of = true, done = false) %}
+    <div class="num {{ tone }}">
+        <span>{% if done %}<span class="done" title="Roll call done and the need is covered">✓</span>{% endif %}<span class="n">{{ value }}</span>{% if show_of and of > 0 %}<span class="of">/{{ of }}</span>{% endif %}</span>
+        {% if of > 0 %}<span class="bar"><span style="width: {{ _self.pct(value, of) }}%"></span></span>{% endif %}
+    </div>
+{% endmacro %}
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ __('telegram.overview.title') }} · {{ day.format('D, M j') }}</title>
+    <style>
+        :root {
+            --bg: #f4f5f7; --panel: #ffffff; --line: #e3e5e9; --line-soft: #eef0f3;
+            --text: #14161a; --muted: #6a717d; --faint: #9aa0aa;
+            --accent: #2453d4; --accent-soft: #e6ecfb;
+            --good: #17804a; --good-soft: #e3f3ea;
+            --warn: #b25b05; --warn-soft: #fcefdc;
+            --bad: #c42b2b; --bad-soft: #fbe5e5;
+            --track: #e9ebef;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0e1013; --panel: #161920; --line: #262a33; --line-soft: #1e222a;
+                --text: #e9ebef; --muted: #9ba2ae; --faint: #6b7280;
+                --accent: #7c9cff; --accent-soft: #1d2640;
+                --good: #43c787; --good-soft: #132a1f;
+                --warn: #f0a540; --warn-soft: #2e2213;
+                --bad: #f27171; --bad-soft: #321819;
+                --track: #262a33;
+            }
+        }
+        * { box-sizing: border-box; }
+        html { -webkit-text-size-adjust: 100%; }
+        body {
+            margin: 0; background: var(--bg); color: var(--text);
+            font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            font-variant-numeric: tabular-nums;
+        }
+        a { color: inherit; }
+        .wrap { max-width: 1320px; margin: 0 auto; padding: 16px 16px 32px; }
+
+        .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 14px; }
+        .top h1 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+        .top .date { font-size: 28px; font-weight: 650; letter-spacing: -.02em; line-height: 1.15; }
+        .top .date small { font-size: 13px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 3px 9px; vertical-align: 5px; margin-left: 6px; letter-spacing: 0; }
+        .side { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+        .days { display: flex; flex-wrap: wrap; gap: 2px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+        .days a { text-decoration: none; padding: 6px 12px; border-radius: 7px; font-size: 14px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+        .days a:hover { color: var(--text); background: var(--line-soft); }
+        .days a.on { background: var(--text); color: var(--panel); }
+        .days a.is-today:not(.on) { color: var(--accent); }
+        .meta { font-size: 13px; color: var(--faint); }
+        .meta a { color: var(--muted); }
+
+        .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+        .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px 12px; }
+        .kpi .label { font-size: 14px; color: var(--muted); font-weight: 500; }
+        .kpi .value { font-size: 40px; font-weight: 650; letter-spacing: -.03em; line-height: 1.05; margin: 2px 0 1px; }
+        .kpi .value .of { font-size: 20px; color: var(--faint); font-weight: 500; letter-spacing: 0; }
+        .kpi .sub { font-size: 13px; color: var(--muted); }
+        .kpi .bar { height: 4px; margin-top: 8px; }
+
+        .slot { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+        .slot-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 10px 16px 8px; }
+        .slot-head::before { content: ""; align-self: center; width: 7px; height: 7px; border-right: 2px solid var(--faint); border-bottom: 2px solid var(--faint); transform: rotate(-45deg); transition: transform .15s; margin-right: 2px; }
+        .slot[open] > .slot-head::before { transform: rotate(45deg); }
+        .slot:not([open]) > .slot-head { padding-bottom: 10px; }
+        .slot-head h2 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -.01em; }
+        .state { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; }
+        .state.running { color: var(--good); background: var(--good-soft); }
+        .state.upcoming { color: var(--accent); background: var(--accent-soft); }
+        .state.over { color: var(--muted); background: var(--line-soft); }
+        .slot-head .sum { font-size: 15px; color: var(--muted); }
+        .slot-head .sum b { color: var(--text); font-weight: 600; }
+        .slot-body { overflow-x: auto; }
+
+        .grid { display: grid; grid-template-columns: minmax(170px, 1.8fr) repeat(4, minmax(92px, 1fr)); gap: 0 16px; align-items: center; min-width: 600px; padding: 0 16px; }
+        .grid.head { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); padding-top: 5px; padding-bottom: 5px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+        .grid.head > :not(:first-child), .num { text-align: right; }
+        .slot-body details { border-bottom: 1px solid var(--line-soft); }
+        .slot-body details:last-child { border-bottom: 0; }
+        summary { list-style: none; cursor: pointer; }
+        summary.grid { padding-top: 8px; padding-bottom: 8px; }
+        summary::-webkit-details-marker { display: none; }
+        summary:hover { background: var(--line-soft); }
+        .area { position: relative; display: flex; flex-direction: column; min-width: 0; padding-left: 18px; }
+        .area::before { content: ""; position: absolute; left: 1px; top: 8px; width: 6px; height: 6px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); transition: transform .15s; }
+        details[open] > summary .area::before { transform: rotate(45deg); }
+        .area .name { text-decoration: none; font-size: 16px; font-weight: 550; line-height: 1.25; }
+        .area .lead { margin-top: 1px; font-size: 13px; line-height: 1.3; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .area .lead .handle { color: var(--faint); }
+        .area .lead .one { display: block; overflow: hidden; text-overflow: ellipsis; }
+        .is-over summary { color: var(--muted); }
+
+        .num { display: flex; flex-direction: column; align-items: flex-end; }
+        .num .done { display: inline-block; width: 12px; height: 12px; margin-right: 5px; border-radius: 50%; background: var(--good); color: var(--panel); font-size: 8px; font-weight: 800; line-height: 12px; text-align: center; vertical-align: 2px; }
+        .num .n { font-size: 18px; font-weight: 600; }
+        .num .of { color: var(--faint); font-size: 14px; }
+        .num .bar { width: 64px; height: 3px; margin-top: 3px; }
+        .bar { display: block; background: var(--track); border-radius: 2px; overflow: hidden; }
+        .bar > span { display: block; height: 100%; background: var(--faint); border-radius: 2px; }
+        .good .n, .good .value { color: var(--good); } .good .bar > span { background: var(--good); }
+        .warn .n, .warn .value { color: var(--warn); } .warn .bar > span { background: var(--warn); }
+        .bad .n, .bad .value { color: var(--bad); }
+        .zero .n { color: var(--faint); font-weight: 500; }
+        .info .bar > span { background: var(--accent); }
+
+        .people { list-style: none; margin: 0; padding: 0 16px 8px 34px; min-width: 600px; }
+        .person { display: grid; grid-template-columns: 130px 1fr; align-items: baseline; gap: 12px; font-size: 14px; padding: 3px 0; border-top: 1px solid var(--line-soft); }
+        .person:first-child { border-top: 0; }
+        .person a { text-decoration: none; font-weight: 500; }
+        .person a:hover { text-decoration: underline; }
+        .person .handle, .person .note { color: var(--faint); }
+        .person .note { font-size: 13px; margin-left: 4px; }
+        .tag { justify-self: start; font-size: 12px; font-weight: 600; border-radius: 5px; padding: 1px 7px; white-space: nowrap; }
+        .tag.here { color: var(--good); background: var(--good-soft); }
+        .tag.checked_in { color: var(--accent); background: var(--accent-soft); }
+        .tag.missing { color: var(--muted); background: var(--line-soft); }
+        .tag.no_show { color: var(--bad); background: var(--bad-soft); }
+        .person.is-no_show a { text-decoration: line-through; color: var(--muted); }
+        .empty { color: var(--muted); font-size: 15px; padding: 0 16px 14px 34px; }
+
+        .none { background: var(--panel); border: 1px dashed var(--line); border-radius: 12px; padding: 40px; text-align: center; color: var(--muted); }
+        .legend { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.45; color: var(--muted); display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 24px; }
+        .legend b { color: var(--text); font-weight: 600; }
+
+        @media (max-width: 900px) {
+            .kpis { grid-template-columns: repeat(2, 1fr); }
+            .side { align-items: flex-start; }
+            .top .date { font-size: 24px; }
+        }
+    </style>
+</head>
+<body>
+<div class="wrap" id="overview">
+    <header class="top">
+        <div>
+            <h1>{{ __('telegram.overview.title') }}</h1>
+            <div class="date">{{ day.format('l, F j') }}{% if day.toDateString() == today %}<small>Today</small>{% endif %}</div>
+        </div>
+        <div class="side">
+            {% if days|length > 1 %}
+                <nav class="days">
+                    {% for value, label in days %}
+                        <a href="{{ url('/admin/telegram/overview', {'day': value}) }}"
+                           class="{{ value == day.toDateString() ? 'on' }} {{ value == today ? 'is-today' }}">{{ label }}</a>
+                    {% endfor %}
+                </nav>
+            {% endif %}
+            <div class="meta">
+                <span id="overview-status" data-time="{{ now.format('H:i') }}">Updated {{ now.format('H:i') }}</span> ·
+                <a href="{{ url('/admin/telegram/attendance', {'day': day.toDateString()}) }}">{{ __('telegram.attendance.title') }}</a> ·
+                <a href="{{ url('/admin/telegram/checkins', {'day': day.toDateString()}) }}">{{ __('telegram.checkins.title') }}</a> ·
+                <a href="{{ url('/admin/telegram') }}">Engelsystem</a>
+            </div>
+        </div>
+    </header>
+
+    {% if slots is empty %}
+        <div class="none">No shifts on this day.</div>
+    {% else %}
+        <section class="kpis">
+            <div class="kpi">
+                <div class="label">Needed team members</div>
+                <div class="value">{{ t.needed }}</div>
+                <div class="sub">volunteers on {{ slots|reduce((sum, slot) => sum + slot.rows|length, 0) }} shifts</div>
+            </div>
+            <div class="kpi info">
+                <div class="label">Checked in</div>
+                <div class="value">{{ t.checked_in }}<span class="of">/{{ t.needed }}</span></div>
+                <div class="sub">{{ _self.pct(t.checked_in, t.needed) }}% of needed, at the desk</div>
+                <div class="bar"><span style="width: {{ _self.pct(t.checked_in, t.needed) }}%"></span></div>
+            </div>
+            <div class="kpi {{ t.needed and t.here >= t.needed ? 'good' : 'info' }}">
+                <div class="label">Team members working</div>
+                <div class="value">{{ t.here }}<span class="of">/{{ t.needed }}</span></div>
+                <div class="sub">confirmed by roll call · {{ _self.pct(t.here, t.needed) }}% of needed</div>
+                <div class="bar"><span style="width: {{ _self.pct(t.here, t.needed) }}%"></span></div>
+            </div>
+            <div class="kpi {{ t.no_shows ? 'bad' }}">
+                <div class="label">No-shows</div>
+                <div class="value">{{ t.no_shows }}</div>
+                <div class="sub">{{ t.no_shows ? 'marked on shifts' : 'none marked' }}</div>
+            </div>
+        </section>
+
+        {% for slot in slots %}
+            {% set s = slot.totals %}
+            {% set started = slot.state != 'upcoming' %}
+            {# A half day folds away; overview.js remembers that on this screen #}
+            <details class="slot" data-key="half-{{ slot.name }}" open>
+                <summary class="slot-head">
+                    <h2>{{ slot.name }}</h2>
+                    <span class="state {{ slot.state }}">{{ slot.state == 'running' ? 'Now' : (slot.state == 'over' ? 'Over' : 'Upcoming') }}</span>
+                    <span class="sum">
+                        <b>{{ s.needed }}</b> needed ·
+                        <b>{{ s.checked_in }}</b>/{{ s.needed }} checked in ·
+                        <b>{{ s.here }}</b>/{{ s.needed }} working in shift
+                        {%- if s.no_shows %} · <b style="color: var(--bad)">{{ s.no_shows }}</b> no-show{{ s.no_shows > 1 ? 's' }}{% endif %}
+                    </span>
+                </summary>
+                <div class="slot-body">
+                    <div class="grid head">
+                        <div>Area</div><div>Needed</div><div>Checked in</div><div>Working in shift</div><div>No-shows</div>
+                    </div>
+                    {% for row in slot.rows %}
+                        {# Leads count as checked in and aren't listed; the row names them #}
+                        {% set people = row.people|filter(p => not p.lead) %}
+                        {# The lead marked every volunteer on the shift here or no-show, and enough are here #}
+                        {% set rollcall_done = people is not empty and row.here >= row.needed
+                            and people|filter(p => not p.here and not p.no_show) is empty %}
+                        <details class="{{ row.over ? 'is-over' }}" data-key="{{ row.id }}">
+                            <summary class="grid">
+                                <div class="area">
+                                    <a class="name" href="{{ url('/shifts', {'action': 'view', 'shift_id': row.shift.id}) }}">{{ row.angel_type.name }}</a>
+                                    {% if row.leads is not empty %}
+                                        <span class="lead">
+                                            {%- for lead in row.leads -%}
+                                                <span class="one">{{ _self.who(lead.user, lead.handle, false) }}</span>
+                                            {%- endfor -%}
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                <div class="num {{ row.needed ? '' : 'zero' }}"><span class="n">{{ row.needed }}</span></div>
+                                {{ _self.count(row.checked_in, row.needed, not row.needed and not row.checked_in ? 'zero' : (row.checked_in >= row.needed ? 'good' : (started or past ? 'warn' : 'info'))) }}
+                                {{ _self.count(row.here, row.needed, not row.needed and not row.here ? 'zero' : (row.here >= row.needed ? 'good' : (row.over or past ? 'warn' : 'info')), true, rollcall_done) }}
+                                <div class="num {{ row.no_shows ? 'bad' : 'zero' }}"><span class="n">{{ row.no_shows }}</span></div>
+                            </summary>
+                            {% if people is empty %}
+                                <div class="empty">No volunteers on this shift.</div>
+                            {% else %}
+                                {# One per line, by status: here (the lead's confirmation), checked in, not checked in, no-show #}
+                                <ol class="people">
+                                    {% for person in people %}
+                                        <li class="person is-{{ person.status }}">
+                                            <span class="tag {{ person.status }}">{{ {'here': 'Working in shift', 'checked_in': 'Checked in', 'missing': 'Not checked in', 'no_show': 'No-show'}[person.status] }}</span>
+                                            <span>
+                                                {{ _self.who(person.user, person.handle) }}
+                                                {%- if person.no_show and person.comment %} <span class="note">· “{{ person.comment }}”</span>{% endif %}
+                                            </span>
+                                        </li>
+                                    {% endfor %}
+                                </ol>
+                            {% endif %}
+                        </details>
+                    {% endfor %}
+                </div>
+            </details>
+        {% endfor %}
+    {% endif %}
+
+    <footer class="legend">
+        <div><b>Needed</b>: volunteers only; leads are never counted or listed, the shift's lead is named under the area.</div>
+        <div><b>Checked in</b>: volunteers on the shift who scanned the day's code at the desk or were checked in by hand, out of needed.</div>
+        <div><b>Working in shift</b>: the final confirmation, volunteers on the shift their lead marked here in the roll call (sent 15 minutes before the shift), out of needed.</div>
+        <div><b>No-shows</b>: marked in Engelsystem or in the roll call. Click a shift to see who is on it.</div>
+    </footer>
+</div>
+<script src="{{ url('/admin/telegram/overview.js') }}"></script>
+</body>
+</html>
