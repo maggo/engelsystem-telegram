@@ -103,24 +103,43 @@ class Scheduler
 
     /**
      * A tick can take longer than INTERVAL_SECONDS; the database lock keeps a second one
-     * from running at the same time and doubling the send rate
+     * from running at the same time and doubling the send rate.
+     * User-level locks are MySQL-specific.
      */
     protected function lock(): bool
     {
-        return (int) $this->db->selectOne('SELECT GET_LOCK(?, 0) AS locked', [$this->lockName()])->locked === 1;
+        if ($this->db->getDriverName() !== 'mysql') {
+            return true;
+        }
+
+        try {
+            return (int) $this->db->selectOne('SELECT GET_LOCK(?, 0) AS locked', [$this->lockName()])->locked === 1;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     protected function unlock(): void
     {
-        $this->db->select('SELECT RELEASE_LOCK(?)', [$this->lockName()]);
+        if ($this->db->getDriverName() !== 'mysql') {
+            return;
+        }
+
+        try {
+            $this->db->select('SELECT RELEASE_LOCK(?)', [$this->lockName()]);
+        } catch (Throwable) {
+        }
     }
 
     /**
-     * Database locks are per MySQL server, so another Engelsystem on it (staging) has its own
+     * Database locks are per MySQL server, so another Engelsystem on it (staging) has its own.
+     * MySQL limits GET_LOCK names to 64 characters.
      */
     protected function lockName(): string
     {
-        return $this->db->getDatabaseName() . '.' . self::KEY;
+        $name = $this->db->getDatabaseName() . '.' . self::KEY;
+
+        return strlen($name) <= 64 ? $name : 'es_' . substr(hash('sha256', $name), 0, 61);
     }
 
     /**
