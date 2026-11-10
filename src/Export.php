@@ -304,8 +304,8 @@ class Export
         return [
             'id'         => $user->id,
             'name'       => $user->name,
-            'first_name' => $user->personalData->first_name,
-            'last_name'  => $user->personalData->last_name,
+            'first_name' => $user->personalData?->first_name ?? '',
+            'last_name'  => $user->personalData?->last_name ?? '',
         ];
     }
 }

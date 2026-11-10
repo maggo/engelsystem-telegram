@@ -320,9 +320,11 @@ class Import
 
             // Registration drops the name unless "full name" is enabled in the config; the bot and
             // the leads need it either way
-            $user->personalData->first_name = $firstName ?: null;
-            $user->personalData->last_name = $lastName ?: null;
-            $user->personalData->save();
+            if ($user->personalData) {
+                $user->personalData->first_name = $firstName ?: null;
+                $user->personalData->last_name = $lastName ?: null;
+                $user->personalData->save();
+            }
 
             TelegramAccount::query()->create(['user_id' => $user->id, 'username' => $handle]);
 
@@ -343,7 +345,10 @@ class Import
     protected static function availableUsername(string $handle): string
     {
         $pattern = (string) config('username_regex');
-        $base = $pattern === '' || !preg_match($pattern, $handle) ? $handle : preg_replace('/\W/', '', $handle);
+        $base = $pattern === '' || preg_match($pattern, $handle) ? $handle : preg_replace('/\W/', '', $handle);
+        if ($base === '') {
+            $base = 'user';
+        }
         $base = mb_substr($base, 0, self::USERNAME_LENGTH);
 
         $username = $base;

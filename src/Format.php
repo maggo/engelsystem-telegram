@@ -177,12 +177,14 @@ class Format
 
     public function plainName(User $user): string
     {
-        $name = trim($user->personalData->first_name . ' ' . $user->personalData->last_name);
+        $first = $user->personalData?->first_name ?? '';
+        $last = $user->personalData?->last_name ?? '';
+        $name = trim($first . ' ' . $last);
         return $name !== '' ? $name : $user->name;
     }
 
     public function shortName(User $user): string
     {
-        return $user->personalData->first_name ?: $user->name;
+        return $user->personalData?->first_name ?: $user->name;
     }
 }
